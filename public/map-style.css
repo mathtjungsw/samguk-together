@@ -1,0 +1,28 @@
+.map-card{border-color:#bdc3ac;background:#f5f1e5;box-shadow:0 5px 18px #53654d16}
+.map-toolbar{background:#f2efe2;border-bottom:1px solid #c5cbb4;padding:9px 14px}
+.map-title{font-family:Batang,serif;letter-spacing:1px;font-size:14px;color:#344a37}
+.map-viewport{background:radial-gradient(ellipse at 47% 42%,#f1f0df,#e4e9de)}
+.map-land-shadow{fill:#a6b69b;stroke:#a6b69b;stroke-width:1.7;vector-effect:non-scaling-stroke;opacity:.5}
+.map-land-base{fill:#e0e4cf;stroke:#9da994;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.territory-shape{stroke:#8d9b85;stroke-width:.8;fill-opacity:1;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.territory-link:hover .territory-shape{fill-opacity:.82}
+.territory-link.is-adjacent .territory-shape{stroke:#627b54;stroke-width:1.5;fill-opacity:1}
+.territory-link.is-source .territory-shape{stroke:#a7793f;stroke-width:2.4;fill-opacity:1}
+.territory-link.is-target .territory-shape{stroke:#a2543c;stroke-width:2.8;fill-opacity:1}
+.map-pin{fill:#758774;opacity:.65}
+.map-city .city-shadow{fill:#49644d;opacity:.2}
+.map-city .city-wall{fill:#f8f4e8;stroke:#687b6a;stroke-width:.9;stroke-linejoin:round}
+.map-city .city-door{fill:#687b6a}
+.map-city .city-flag{fill:#bb8e52;stroke:#f7f2df;stroke-width:.8}
+.map-place-label{font-family:"Malgun Gothic",sans-serif;font-size:11px;fill:#304833;paint-order:stroke;stroke:#f5f2e5;stroke-width:3.2;stroke-linejoin:round}
+.map-place-label.priority{font-weight:700;fill:#285b40}
+.map-caption{background:#f4f2e7;border-top:1px solid #c7ceb7;color:#65775e}
+.name-change-button{margin-top:9px;color:#cfbc85!important;text-decoration:underline;text-underline-offset:3px}
+.ruler-name-modal{max-width:430px;margin:auto;text-align:center;padding:32px}
+.ruler-name-seal{font:32px/1 Batang,serif;color:#a9854d;border:1px solid #b99b66;width:50px;height:56px;display:grid;place-items:center;margin:0 auto 18px;border-radius:3px;box-shadow:inset 0 0 0 3px #f3f4e9,inset 0 0 0 4px #b99b66}
+.ruler-name-modal h2{font-size:23px;font-weight:500;margin:0 0 12px}
+.ruler-name-modal p{font-size:12px;line-height:1.8;color:#74856c;margin:0 0 22px}
+.ruler-name-modal label{display:block;text-align:left;color:#536c4f;font-size:12px;margin:0 0 7px}
+.ruler-name-modal input{width:100%;height:45px;padding:10px 12px;border:1px solid #b9c8ae;border-radius:4px;background:#fbfcf6;color:#29422f;font-size:16px;margin-bottom:11px}
+.ruler-name-modal .name-cancel{margin-top:18px;color:#6e8066}
+@media(max-width:550px){.ruler-name-modal{padding:27px 20px}.map-place-label{font-size:11px}.map-toolbar{padding:7px 10px}}

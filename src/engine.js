@@ -131,11 +131,15 @@ export function applyCommand(raw,actor,command,now=command.at){
   const before=structuredClone(s.territories);
   if(c.type==='register'){
     requireGame(!s.players[actor],'이미 전장에 입장한 군주입니다.');
-    const name=cleanName(c.name);s.players[actor]={uid:actor,name,color:Object.keys(s.players).length%COLORS.length,joinedAt:now,life:0,eliminatedAt:0,startedAt:0,captures:0,defeats:0};
+    const name=cleanName(c.name);s.players[actor]={uid:actor,name,nameChosen:true,color:Object.keys(s.players).length%COLORS.length,joinedAt:now,life:0,eliminatedAt:0,startedAt:0,captures:0,defeats:0};
     logEvent(s,c,{type:'register',text:`${name}님이 전장에 들어왔습니다.`});
   }else{
     requireGame(s.players[actor],'먼저 전장에 입장해 주세요.');
-    if(c.type==='start'){
+    if(c.type==='rename'){
+      const name=cleanName(c.name),player=s.players[actor];player.name=name;player.nameChosen=true;
+      for(const territory of ownedTerritories(s,actor))for(const unit of territory.units)if(unit.sides===20&&unit.id.startsWith(`${actor}:life:`))unit.name=name;
+      logEvent(s,c,{type:'rename',text:`${name}님이 군주 이름을 정했습니다.`});
+    }else if(c.type==='start'){
       requireGame(s.territories[c.territoryId],'영토를 찾을 수 없어요.');requireGame(!s.territories[c.territoryId].owner,'다른 군주의 영토입니다. 양도 승인을 요청해 주세요.');
       const p=beginLife(s,actor,c.territoryId,now);logEvent(s,c,{type:'start',to:c.territoryId,text:`${p.name}님이 ${placeInfo(c.territoryId).ko}에서 ${p.life>1?'다시 깃발을 올렸습니다':'깃발을 올렸습니다'}.`});
     }else if(c.type==='move'){

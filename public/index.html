@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#20392e"><meta name="description" content="지인들과 함께하는 주사위 영토 전략 게임. 90개 영토에서 깃발을 올리고, 틈틈이 병력을 모아 진군하세요.">
-  <title>삼국 · 함께 천하</title><link rel="stylesheet" href="./style.css">
+  <title>삼국 · 함께 천하</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./map-style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%2320392e'/%3E%3Ctext x='32' y='44' text-anchor='middle' fill='%23e0c48c' font-size='38'%3E三%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -23,7 +23,7 @@
       </div>
     </section>
     <aside class="command-panel">
-      <div class="command-header"><p class="eyebrow">지금 내릴 명령</p><div class="commander-title"><h2 id="commander-name">첫 출정을 준비하세요</h2><span id="save-status">기록 준비</span></div></div>
+      <div class="command-header"><p class="eyebrow">지금 내릴 명령</p><div class="commander-title"><h2 id="commander-name">첫 출정을 준비하세요</h2><span id="save-status">기록 준비</span></div><button id="name-change-button" class="text-button name-change-button" hidden>군주 이름 바꾸기</button></div>
       <div class="command-scroll" id="command-content"></div>
       <div class="command-footer" id="command-footer"></div>
     </aside>

@@ -55,8 +55,9 @@ export class FirebaseStore {
     // .info is maintained locally by the SDK. A server get() is not supported
     // by production RTDB; wait for the local listener already installed in setup.
     this.connected=await new Promise(resolve=>this.sdk.onValue(this.sdk.ref(this.db,'.info/connected'),snap=>resolve(snap.val()===true),{onlyOnce:true}));
-    if(!this.world.players[this.uid])await this.submit({type:'register',name:this.profileName});
-    this.onWorld(this.world);return this.world.players[this.uid];
+    // A Google identity authenticates access; the player chooses the public
+    // ruler name separately before a profile is registered or migrated.
+    this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
   }
   async submit(spec){
     if(!this.connected)throw new GameError('연결이 끊겼어요. 다시 연결된 뒤 명령을 보내 주세요.','OFFLINE');
