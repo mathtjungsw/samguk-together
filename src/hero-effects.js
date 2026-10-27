@@ -1,3 +1,5 @@
+import {battleCondition} from './effect-preview.js';
+import {chooseOfficers} from './role-policy.js';
 import EFFECTS from './data/hero-effects.json' with {type:'json'};
 import {MINUTE,RULES,baseCapacity,placeInfo,adjacent,ownedTerritories,seededRandom,rawScore,sumRoll,byId} from './game-core.js';
 export {EFFECTS};
@@ -39,7 +41,8 @@ export function regularRecruitBonus(s,t,at){
   if(n===86&&at-Math.max(preparedSince(t,u),t.lastAttackAt||0,st.lastProcAt||0)>=60*MINUTE){markProc(u,at);return u;}
   return null;
 }
-export function battleOfficers(t,units,ids,at,attack){
+export function battleOfficers(t,units,ids,at,attack,s=null){
+  if(t.roles?.policyVersion===1)return chooseOfficers(s||{seed:t.roles.policySeed},t,units,attack?'attack':'defense',at,2);
   const chosen=ids??(attack?[]:t.roles?.defense||[]);
   return [...new Set(chosen)].slice(0,2).map(id=>units.find(u=>u.id===id)).filter(u=>u&&u.readyAt<=at&&effectOf(u)?.battle&&effectOf(u)[attack?'attack':'defense']);
 }
@@ -55,8 +58,8 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
   const rng=seededRandom(seed),roll=(units,side)=>units.map((u,i)=>({...structuredClone(u),originalRoll:rolls?.[side]?.[i]??(1+Math.floor(rng()*u.sides)),roll:0})).map(u=>({...u,roll:u.originalRoll}));
   const a={attack:true,dice:roll(attackUnits,'attack'),coefficient:.9,chosen:[],ledger:new Map(),penalty:0,flatPenalty:0,cancel:0,relief:0,rerolled:new Set(),used:[]};
   const d={attack:false,dice:roll(defendUnits,'defense'),coefficient:1,chosen:[],ledger:new Map(),penalty:0,flatPenalty:0,cancel:0,relief:0,rerolled:new Set(),used:[]};
-  a.chosen=battleOfficers(s.territories[from],a.dice,attackIds,at,true);
-  d.chosen=battleOfficers(s.territories[to],d.dice,defenseIds,at,false);
+  a.chosen=battleOfficers(s.territories[from],a.dice,attackIds,at,true,s);
+  d.chosen=battleOfficers(s.territories[to],d.dice,defenseIds,at,false,s);
   const ledger=(side,u)=>{if(!side.ledger.has(u.id))side.ledger.set(u.id,{...emptyLedger(),name:u.name,number:effectNumber(u)});return side.ledger.get(u.id);};
   const ownChange=(side,u,fn,label)=>{const before=rawScore(sumRoll(side.dice),side.attack),l=ledger(side,u);fn();const diff=rawScore(sumRoll(side.dice),side.attack)-before;if(diff>=0)l.bonus+=diff;else l.cost+=diff;if(diff)l.logs.push(`${u.name} · ${label} ${diff>0?'+':''}${diff}`);};
   const flat=(side,u,value,label)=>{const l=ledger(side,u);l.flat+=value;if(value)l.logs.push(`${u.name} · ${label} +${value}`);};
@@ -78,47 +81,47 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     const plus=(value,label='특기')=>flat(side,u,value,label);
     const self=value=>ownChange(side,u,()=>{u.roll=Math.min(u.sides,u.roll+value);},'본인 눈');
     const addDie=(target,value)=>{if(target)ownChange(side,u,()=>{target.roll=Math.min(target.sides,target.roll+value);},'아군 눈');};
-    if(n===4&&enemy.dice.some(x=>x.sides>=6))plus(4);
-    if(n===5&&less)plus(5);
-    if(n===7&&num<=6)plus(5);
+    if(n===4&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(4);
+    if(n===5&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
+    if(n===7&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
     if(n===8)ownChange(side,u,()=>{u.roll=Math.max(u.roll,Math.min(8,u.sides));},'최저 눈');
     if(n===9)self(4);
-    if(n===10&&foes>=num*2)plus(6);
-    if(n===17&&at-Math.max(preparedSince(s.territories[to],u,true),st.lastProcAt||0)>=30*MINUTE){plus(6);side.used.push({id:u.id,type:'proc'});}
-    if(n===20&&foes<=4)plus(6);
-    if(n===21&&adjCount()>=2)plus(3);
+    if(n===10&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(6);
+    if(n===17&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met){plus(6);side.used.push({id:u.id,type:'proc'});}
+    if(n===20&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(6);
+    if(n===21&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(3);
     if(n===23)plus(2);
-    if(n===24&&inf.length>=4)for(const target of sorted(inf).slice(0,2))ownChange(side,u,()=>{target.roll=Math.max(target.roll,2);},'군율');
+    if(n===24&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)for(const target of sorted(inf).slice(0,2))ownChange(side,u,()=>{target.roll=Math.max(target.roll,2);},'군율');
     if(n===26)plus(3);
-    if(n===28&&at-preparedSince(s.territories[to],u,true)>=20*MINUTE)plus(3);
+    if(n===28&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(3);
     if(n===29)self(2);
     if(n===30){const first=!st.defended[to],initial=!Object.keys(st.defended).length;if(!first)plus(1);else if(initial||at-preparedSince(s.territories[to],u,true)>=20*MINUTE)plus(4);}
-    if(n===31&&foes-num>=2)plus(4);
+    if(n===31&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(4);
     if(n===32)plus(st.lastAttackWon&&at-st.lastAttackAt<=30*MINUTE?3:1);
     if(n===34)self(Math.min(2,st.attacks));
-    if(n===35&&inf.length>=3)self(2);
-    if(n===37&&infantry(enemy.dice).length)ownChange(side,u,()=>{u.roll=Math.max(1,u.roll-1);},'화공 비용');
-    if(n===38&&officers(side.dice).length>=2)plus(2);
-    if(n===42&&hasRuler(side.dice))plus(3);
-    if(n===44&&num<=5)plus(4);
-    if(n===45&&!s.territories[to].owner)plus(3);
-    if(n===51&&num<=5)plus(2);
-    if(n===55&&officers(side.dice).length>=2)plus(1);
-    if(n===56&&less)plus(2);
-    if(n===58&&inf.length>=4)plus(2);
-    if(n===60&&!s.territories[to].owner)plus(2);
-    if(n===61&&num>foes)plus(2);
+    if(n===35&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)self(2);
+    if(n===37&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)ownChange(side,u,()=>{u.roll=Math.max(1,u.roll-1);},'화공 비용');
+    if(n===38&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===42&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(3);
+    if(n===44&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(4);
+    if(n===45&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(3);
+    if(n===51&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===55&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(1);
+    if(n===56&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===58&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===60&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===61&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
     if(n===62)self(1);
-    if(n===63&&foes<=4)plus(2);
-    if(n===64&&num<=4)plus(2);
+    if(n===63&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===64&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
     if(n===65)side.cancel+=1;
-    if(n===68&&num<=4)plus(2);
-    if(n===69&&enemy.dice.some(x=>x.sides===12||x.sides===20))plus(2);
-    if(n===70&&less)side.cancel+=2;
-    if(n===72&&new Set(side.dice.map(x=>x.sides)).size>=3)plus(2);
-    if(n===75&&num>=6)plus(1);
-    if(n===76&&!hasRuler(side.dice))plus(2);
-    if(n===78&&inf.length>=3)addDie(sorted(inf)[0],1);
+    if(n===68&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===69&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===70&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)side.cancel+=2;
+    if(n===72&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===75&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(1);
+    if(n===76&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
+    if(n===78&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)addDie(sorted(inf)[0],1);
     if(n===79){const target=sorted(side.dice.filter(x=>x.sides===12))[0];addDie(target,target?.name==='관우'?2:1);}
     if(n===87)side.relief+=1;
     if(n===91)self(st.wins>=4?2:st.wins>=2?1:0);

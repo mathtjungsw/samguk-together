@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as Legacy from '../src/legacy-engine.js';
-import {MAP,RULES,MINUTE,createWorld,applyCommand,chooseStartTerritory,ownedTerritories,livingUnits,queuedUnits,refreshIndexes,normalizeWorld,upgradeWorld,unitTier,projectWorld,settleRecruitment,capacityOf,movementPlan,validateMove,validateRevival,visibleHistory,systemEvents,RELEASE,leaderboard,adjacent} from '../src/engine.js';
+import {MAP,RULES,MINUTE,createWorld,applyCommand,chooseStartTerritory,ownedTerritories,livingUnits,queuedUnits,refreshIndexes,normalizeWorld,upgradeWorld,unitTier,projectWorld,settleRecruitment,capacityOf,movementPlan,validateMove,validateRevival,visibleHistory,systemEvents,RELEASE,leaderboard,adjacent} from '../src/engine-v3.js';
 import {EFFECTS,economy,evaluateBattle,stateOf} from '../src/hero-effects.js';
 import {T,command,soldier,hero,fixture} from './v3-helpers.mjs';
 

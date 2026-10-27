@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {MAP,RANKS,RULES,RELEASE} from '../src/engine.js';
+import {MAP,RANKS,RULES,RELEASE} from '../src/engine-v3.js';
 import {EFFECTS} from '../src/hero-effects.js';
 const q=s=>JSON.stringify(s),child=(s,k)=>`${s}.child(${q(k)})`,val=s=>`${s}.val()`,exists=s=>`${s}.exists()`,same=(n,o)=>`${val(n)} == ${val(o)}`;
 const O="root.child('worlds').child($world)",W=d=>'newData'+'.parent()'.repeat(d),C=d=>`${W(d)}.child('command')`,P=(n,k)=>`${n}.child('${k}')`,type=(c,t)=>`${c}.child('type').val() == '${t}'`;

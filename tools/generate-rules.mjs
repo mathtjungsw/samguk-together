@@ -1,2 +1,1 @@
-// Generate the currently supported protocol.
-import './generate-rules-v3.mjs';
+import './generate-rules-v4.mjs';

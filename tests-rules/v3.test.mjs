@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
 import * as sdk from 'firebase/database';
-import {createWorld,applyCommand,refreshIndexes,ownedTerritories,capacityOf,projectWorld,queuedUnits,RELEASE,MAP,RULES} from '../src/engine.js';
+import {createWorld,applyCommand,refreshIndexes,ownedTerritories,capacityOf,projectWorld,queuedUnits,RELEASE,MAP,RULES} from '../src/engine-v3.js';
 import {FirebaseStore,changedPaths} from '../src/store.js';
 import {fixture,hero,soldier} from '../tests/v3-helpers.mjs';
 let env,serial=0;
@@ -14,7 +14,7 @@ const read=async()=>((await sdk.get(sdk.ref(db('a'),'worlds/main'))).val());
 const save=(uid,a,b)=>sdk.update(sdk.ref(db(uid),'worlds/main'),changedPaths(a,b));
 function client(uid,s){const store=new FirebaseStore({worldId:'main'});Object.assign(store,{uid,sdk,db:db(uid),world:structuredClone(s),chat:null,connected:true});store.ref=sdk.ref(store.db,'worlds/main');store.chatRef=sdk.ref(store.db,'chat/global');return store;}
 const fx=options=>fixture({...options,at:Date.now()});
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('firebase.database.rules.json','utf8')}});});
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('tests/fixtures/protocol3.rules.json','utf8')}});});
 beforeEach(async()=>env.clearDatabase());
 after(async()=>env?.cleanup());
 
@@ -33,4 +33,4 @@ test('v3 15명 동시 충원과 공지를 중복 없이 저장한다',async()=>{
 
 test('v3 타 참가자의 대기 시각과 전투 성장 기록은 충원으로 변경할 수 없다',async()=>{const {s,from}=fx({attack:[hero('조운'),soldier('stay')]});s.territories[from].units[0].readyAt=Date.now()+15*60_000;await seed(s);for(const mutate of [u=>u.readyAt=0,u=>u.effectState.wins++]){const n=cmd(s,'b','recruit');mutate(n.territories[from].units[0]);n.territories[from].revision++;await assertFails(save('b',s,n));}});
 
-test('v3 첫 로그인은 빈 전장을 만들고 군주 이름 입력 후에만 등록한다',async()=>{const store=client('a',null);store.auth={currentUser:{uid:'a',displayName:'구글 이름'}};store.setup=async()=>{};try{const p=await store.login({restore:true});assert.equal(p.name,'');assert.equal(store.world.featureVersion,3);assert.equal((await read()).players?.a,undefined);await store.submit({type:'register',name:'선택한 군주'});assert.equal((await read()).players.a.name,'선택한 군주');}finally{await store.close();}});
+test('v3 이전 전장 로그인도 군주 이름 입력 후에만 등록한다',async()=>{await seed(createWorld(Date.now()));const store=client('a',null);store.auth={currentUser:{uid:'a',displayName:'구글 이름'}};store.setup=async()=>{};try{const p=await store.login({restore:true});assert.equal(p.name,'');assert.equal(store.world.featureVersion,3);assert.equal((await read()).players?.a,undefined);await store.submit({type:'register',name:'선택한 군주'});assert.equal((await read()).players.a.name,'선택한 군주');}finally{await store.close();}});

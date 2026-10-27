@@ -1,7 +1,7 @@
 // Offline migration only. Input/output must stay outside the public repository.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import {upgradeWorld,normalizeWorld} from '../src/engine.js';
+import {upgradeWorld,normalizeWorld} from '../src/engine-v3.js';
 const [input,output]=process.argv.slice(2);
 if(!input||!output)throw Error('Usage: node tools/prepare-upgrade.mjs <private-backup.json> <private-world.json>');
 const root=JSON.parse(fs.readFileSync(input,'utf8')),before=root.worlds?.main||root;

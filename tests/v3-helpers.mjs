@@ -1,4 +1,4 @@
-import {createWorld,applyCommand,refreshIndexes,adjacent,MINUTE,RULES,baseCapacity} from '../src/engine.js';
+import {createWorld,applyCommand,refreshIndexes,adjacent,MINUTE,RULES,baseCapacity} from '../src/engine-v3.js';
 import {heroByName,newEffectState} from '../src/hero-effects.js';
 export const T=Date.parse('2026-10-27T00:00:00Z');
 let serial=0;
