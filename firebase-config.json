@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "worldId": "main",
+  "firebase": {
+    "apiKey": "AIzaSyDXikeOYtR_AihihT2LBBpX7HgrpCWR0dg",
+    "authDomain": "samguk-together.firebaseapp.com",
+    "databaseURL": "https://samguk-together-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "projectId": "samguk-together",
+    "storageBucket": "samguk-together.firebasestorage.app",
+    "messagingSenderId": "657800626120",
+    "appId": "1:657800626120:web:59e38680fe0e6f8121cafd"
+  },
+  "emulators": false
+}
