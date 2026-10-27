@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
 import * as sdk from 'firebase/database';
-import {createWorld,applyCommand,projectWorld,chatMessages,MAP,RULES,RELEASE} from '../src/engine.js';
+import {createWorld,applyCommand,projectWorld,chatMessages,MAP,RULES,RELEASE} from '../src/legacy-engine.js';
 import {FirebaseStore,changedPaths} from '../src/store.js';
 let env,seq=0;
 const db=uid=>env.authenticatedContext(uid,{firebase:{sign_in_provider:'google.com'}}).database();
@@ -12,7 +12,7 @@ const seed=s=>env.withSecurityRulesDisabled(ctx=>sdk.set(sdk.ref(ctx.database(),
 const read=async()=>((await sdk.get(sdk.ref(db('a'),'worlds/main'))).val());
 function client(uid,s){const store=new FirebaseStore({worldId:'main'});Object.assign(store,{uid,sdk,db:db(uid),world:structuredClone(s),chat:null,connected:true});store.ref=sdk.ref(store.db,'worlds/main');store.chatRef=sdk.ref(store.db,'chat/global');return store;}
 function fixture(due=true){const now=Date.now(),past=now-11*60_000;let s=createWorld(past);s=command(s,'a','register',{name:'원래 군주'},past);s=command(s,'a','start',{territoryId:'luoyang'},past);s=command(s,'b','register',{name:'정산 군주'},past);s.territories.luoyang.lastRecruitAt=due?past:now;for(let i=0;i<100;i++){s.seed='shared-hero-'+i;if(!due||projectWorld(s,now).territories.luoyang.units.at(-1).sides>4)break;}return s;}
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('firebase.database.rules.json','utf8')}});});
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('tests/fixtures/protocol2.rules.json','utf8')}});});
 beforeEach(async()=>{await env.clearDatabase();});after(async()=>{await env?.cleanup();});
 
 test('다른 접속자가 미접속 군주의 충원을 확정하고 같은 저장에서 시스템 채팅을 남긴다',async()=>{const s=fixture();await seed(s);const b=client('b',s);await b.submit({type:'recruit'});const saved=await read(),chat=(await sdk.get(b.chatRef)).val();assert.equal(saved.territories.luoyang.units.length,6);assert.equal(chatMessages(chat).length,1);assert.equal(chatMessages(chat)[0].kind,'system');assert.equal(chatMessages(chat)[0].eventId,saved.territories.luoyang.units.at(-1).id);});

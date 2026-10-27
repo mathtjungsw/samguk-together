@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#20392e"><meta name="description" content="지인들과 함께하는 주사위 영토 전략 게임. 90개 영토에서 깃발을 올리고, 틈틈이 병력을 모아 진군하세요.">
-  <title>삼국 · 함께 천하</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./map-style.css"><link rel="stylesheet" href="./expansion.css">
+  <title>삼국 · 함께 천하</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./map-style.css"><link rel="stylesheet" href="./expansion.css"><link rel="stylesheet" href="./heroes.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%2320392e'/%3E%3Ctext x='32' y='44' text-anchor='middle' fill='%23e0c48c' font-size='38'%3E三%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -23,7 +23,7 @@
     <aside class="command-panel" id="command-panel">
       <div class="command-header"><div class="commander-title"><h2 id="commander-name">첫 출정을 준비하세요</h2><span id="save-status">기록 준비</span></div><div class="commander-subtitle"><span id="ruler-state">천하가 당신을 기다립니다</span><time id="world-clock">--:--</time></div><button id="name-change-button" class="text-button name-change-button" hidden>군주 이름 바꾸기</button><button id="panel-toggle" class="text-button" aria-expanded="true">정보 접기</button></div>
       <div class="summary-strip" id="summary-strip" aria-label="내 세력 현황"></div>
-      <div class="panel-tabs" role="tablist" aria-label="전장 정보"><button data-panel-tab="command" role="tab" aria-selected="true">영토·명령</button><button data-panel-tab="ranking" role="tab" aria-selected="false">랭킹</button><button data-panel-tab="history" role="tab" aria-selected="false">전황</button></div>
+      <div class="panel-tabs" role="tablist" aria-label="전장 정보"><button data-panel-tab="command" role="tab" aria-selected="true">영토·명령</button><button data-panel-tab="heroes" role="tab" aria-selected="false">내 장수</button><button data-panel-tab="ranking" role="tab" aria-selected="false">랭킹</button><button data-panel-tab="history" role="tab" aria-selected="false">전황</button></div>
       <div class="command-scroll" id="command-content"></div>
       <div class="command-footer" id="command-footer"></div>
     <section class="chat-panel" aria-label="전체 채팅">

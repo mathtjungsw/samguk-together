@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MAP,RULES,MINUTE,createWorld,normalizeWorld,applyCommand,projectWorld,ownedTerritories,capacityOf,adjacent,attackScore,casualtyCount,winProbability,addChatMessage,chatMessages} from '../src/engine.js';
+// Protocol 2 is retained as the executable input for save migration.
+import {MAP,RULES,MINUTE,createWorld,normalizeWorld,applyCommand,projectWorld,ownedTerritories,capacityOf,adjacent,attackScore,casualtyCount,winProbability,addChatMessage,chatMessages} from '../src/legacy-engine.js';
 import {changedPaths} from '../src/store.js';
 import {sharedEdges,softenedSegment,softenPoint} from '../src/map-geometry.js';
 

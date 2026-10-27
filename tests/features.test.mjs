@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MAP,RULES,RELEASE,createWorld,applyCommand,projectWorld,adjacent,chatMessages,appendSystemMessages,systemEvents,leaderboard,validateRevival} from '../src/engine.js';
+import {MAP,RULES,RELEASE,createWorld,applyCommand,projectWorld,adjacent,chatMessages,appendSystemMessages,systemEvents,leaderboard,validateRevival} from '../src/legacy-engine.js';
 
 const T=Date.parse('2026-10-27T00:00:00Z');let counter=0;
 const command=(s,actor,type,fields={},at=T)=>applyCommand(s,actor,{id:`feature-command-${++counter}`,type,baseRevision:s.revision,at,...fields});

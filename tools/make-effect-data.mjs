@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+const roster=JSON.parse(fs.readFileSync('src/data/game-data.json','utf8')).roster;
+const clean=s=>s.replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replaceAll('**','').replaceAll('`','').trim();
+const rows=fs.readFileSync('docs/HERO_EFFECTS_PROPOSAL.md','utf8').split('\n').filter(l=>/^\| \d+ \|/.test(l)).map(l=>l.slice(1,-1).split('|').map(clean));
+const economic=new Set([1,2,3,13,47,48,49,52,53,54,66,71,74,81,85,86,90,92,94]);
+const movement=new Set([22,80,82,83,88,93,100]);
+const afterBattle=new Set([6,11,25,27,33,36,40,41,46,50,57,59,77,84,89]);
+const attackOnly=new Set([4,7,15,16,20,21,23,25,31,32,36,37,44,45,46,51,58,59,60,61,63,69,72,73,76,84,89,97,98,99]);
+const defenseOnly=new Set([5,10,17,24,26,28,30,41,42,43,56,57,68,78]);
+const effects=rows.map((r,i)=>{if(r[1]!==roster[i].name)throw Error('Roster mismatch');const number=Number(r[0]);return {id:`hero-${String(number).padStart(3,'0')}`,number,name:r[1],sides:roster[i].sides,tier:roster[i].sides===12?'S':roster[i].sides===8?'A':'B',title:r[2].split(' · ')[0],category:r[2].split(' · ')[1]||'',description:r[3],context:r[4],economic:economic.has(number),movement:movement.has(number),battle:!economic.has(number)&&!movement.has(number),afterBattle:afterBattle.has(number),attack:!defenseOnly.has(number),defense:!attackOnly.has(number)};});
+const edits={13:'담당 영토 D6 충원 확률 +4%p: D4 86% / D6 11% / D8 2.5% / D12 0.5%.',54:'소유 영토가 1~3곳이면 담당 영토 D6 확률 +2%p. 그 외에는 기본 확률.',66:'담당 영토 D6 충원 확률 +1%p.',71:'담당 영토에 인접한 내 영토 1곳의 D6 충원 확률 +1%p.',74:'담당 영토 D8 충원 확률 +0.5%p.',80:'간옹을 기동 담당으로 고른 교환 이동에서 반환 D4 1명의 행동 대기를 10분에서 8분으로 줄입니다. 12시간에 1회.',30:'해당 개체가 그 영토에서 치르는 첫 수비 +4점, 이후 +1점. 다른 영토는 20분 준비. 재방문해도 첫 수비는 다시 충전되지 않습니다.'};
+for(const e of effects)if(edits[e.number])e.description=edits[e.number];
+effects.find(e=>e.number===80).category='교환 보조';
+fs.writeFileSync('src/data/hero-effects.json',JSON.stringify(effects,null,2)+'\n');
+console.log(`100 effects: ${effects.length}, economic ${effects.filter(e=>e.economic).length}, movement ${effects.filter(e=>e.movement).length}`);

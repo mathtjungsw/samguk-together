@@ -42,9 +42,10 @@ export class TerritoryMap {
   paint(){
     if(!this.world||!this.regions)return;
     const sourceTerritory=this.world.territories[this.source];const neighbors=new Set(sourceTerritory?.owner===this.uid?this.layoutById.get(this.source)?.neighbors:[]);
-    this.regions.attr('aria-label',p=>{const t=this.world.territories[p.id],owner=this.world.players[t.owner]?.name||'중립';return `${p.ko}, ${owner}, 병력 ${t.units.length}/${capacityOf(p.id)}명${neighbors.has(p.id)?', 인접 영토':''}`;}).classed('is-source',p=>p.id===this.source).classed('is-target',p=>p.id===this.target).classed('is-adjacent',p=>neighbors.has(p.id));
+    this.regions.attr('aria-label',p=>{const t=this.world.territories[p.id],owner=this.world.players[t.owner]?.name||'중립';return `${p.ko}, ${owner}, 병력 ${t.units.length}/${capacityOf(p.id,this.world)}명${neighbors.has(p.id)?', 인접 영토':''}`;}).classed('is-source',p=>p.id===this.source).classed('is-target',p=>p.id===this.target).classed('is-adjacent',p=>neighbors.has(p.id));
     this.regions.select('path').attr('fill',p=>{const t=this.world.territories[p.id];return t.owner?d3.interpolateRgb('#e7e5d1',COLORS[this.world.players[t.owner]?.color||0])(.56):p.rank==='citadel'?'#e4d8bd':p.rank==='stronghold'?'#d9dfc8':'#e1e3d0';});this.labels();
   }
+  focusTerritory(id){const p=this.cells.find(p=>p.id===id);if(!p||!this.ratio)return;const k=Math.max(1.7,this.zoom.k),x=p.point[0]*this.ratio+this.offset[0],y=p.point[1]*this.ratio+this.offset[1];this.svg.transition().duration(280).call(this.zoomBehavior.transform,d3.zoomIdentity.translate(this.width/2-x*k,this.height/2-y*k).scale(k));}
   labels(){
     if(!this.cells||!this.world||!this.symbols)return;const width=this.width,height=this.height,k=this.zoom.k;
     const priority=new Set([this.source,this.target]),neighbors=new Set(this.source?this.layoutById.get(this.source)?.neighbors:[]);

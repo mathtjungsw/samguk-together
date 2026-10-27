@@ -1,4 +1,4 @@
-import {createWorld,normalizeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
+import {createWorld,normalizeWorld,upgradeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
 export const commandId=()=>crypto.randomUUID();
 export const entropy=()=>crypto.getRandomValues(new Uint32Array(1))[0];
@@ -14,7 +14,7 @@ export class LocalStore {
   constructor({storage=localStorage,key='samguk-online-practice-v1'}={}){this.storage=storage;this.key=key;this.chatKey=key+':chat';this.world=null;this.chat=null;this.uid=null;this.connected=true;this.mode='practice';this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.channel=typeof BroadcastChannel==='undefined'?null:new BroadcastChannel(key);if(this.channel)this.channel.onmessage=()=>this.refresh();this.storageListener=e=>{if(e.key===key||e.key===this.chatKey)this.refresh();};if(typeof window!=='undefined')window.addEventListener('storage',this.storageListener);}
   now(){return Date.now();}
   async locked(task){if(globalThis.navigator?.locks)return navigator.locks.request(this.key,task);return task();}
-  readWorld(){const text=this.storage.getItem(this.key);if(!text)return createWorld(this.now(),'practice-world-v1');try{return normalizeWorld(JSON.parse(text));}catch(error){throw new GameError('이 기기의 연습 기록을 읽지 못했어요. 원본 기록을 보존했습니다.','CORRUPT');}}
+  readWorld(){const text=this.storage.getItem(this.key);if(!text)return createWorld(this.now(),'practice-world-v1');try{const raw=JSON.parse(text);return raw.featureVersion===3?normalizeWorld(raw):upgradeWorld(raw,Math.max(this.now(),raw.updatedAt));}catch(error){throw new GameError('이 기기의 연습 기록을 읽지 못했어요. 원본 기록을 보존했습니다.','CORRUPT');}}
   refresh(){try{this.world=this.readWorld();this.chat=JSON.parse(this.storage.getItem(this.chatKey)||'null');this.onWorld(this.world);this.onChat(this.chat);}catch(error){this.onConnection(false,error.message);}}
   async connect(name,uid){this.uid=uid||`practice-${crypto.randomUUID()}`;await this.locked(()=>{let world=this.readWorld();if(!world.players[this.uid])world=applyCommand(world,this.uid,{id:commandId(),type:'register',name,at:Math.max(this.now(),world.updatedAt),baseRevision:world.revision});this.storage.setItem(this.key,JSON.stringify(world));});this.refresh();this.channel?.postMessage('updated');return this.world.players[this.uid];}
   async submit(spec){return this.locked(()=>{const world=this.readWorld(),c={...spec,id:spec.id||commandId(),at:Math.max(this.now(),world.updatedAt),baseRevision:world.revision};const next=applyCommand(world,this.uid,c),events=systemEvents(world,next);if(events.length){this.chat=appendSystemMessages(JSON.parse(this.storage.getItem(this.chatKey)||'null'),events,this.uid,c.at);this.storage.setItem(this.chatKey,JSON.stringify(this.chat));}this.storage.setItem(this.key,JSON.stringify(next));this.world=next;this.onWorld(next);if(events.length)this.onChat(this.chat);this.channel?.postMessage('updated');return {world:next,event:next.history[c.id]||null};});}
@@ -70,7 +70,7 @@ export class FirebaseStore {
         const before=this.world;
         if(before.receipts[id])return {world:before,event:before.history[id]||null};
         at=Math.max(at,before.updatedAt);
-        if(spec.type==='recruit'&&before.featureVersion===2&&before.rosterVersion===1&&!hasDueRecruitment(before,at))return {world:before,event:null};
+        if(spec.type==='recruit'&&((before.featureVersion===2&&before.rosterVersion===1)||(before.featureVersion===3&&before.rosterVersion===2))&&!hasDueRecruitment(before,at))return {world:before,event:null};
         const command={...spec,id,at,baseRevision:before.revision};const next=applyCommand(before,this.uid,command,at),events=systemEvents(before,next);const patch=changedPaths(before,next);
         try{
           if(events.length){

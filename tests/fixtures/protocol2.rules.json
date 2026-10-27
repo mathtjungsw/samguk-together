@@ -1,0 +1,206 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "worlds": {
+      "$world": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider == 'google.com'",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider == 'google.com' && newData.exists() && newData.child('command').child('actor').val() == auth.uid && newData.child('command').child('at').val() >= now - 120000 && newData.child('command').child('at').val() <= now + 5000 && ((!data.exists() && newData.child('command').child('type').val() == 'init' && newData.child('revision').val() == 0) || (data.exists() && newData.child('revision').val() == data.child('revision').val() + 1 && newData.child('command').child('baseRevision').val() == data.child('revision').val() && (((newData.child('command').child('type').val() == 'register' && !data.child('players').child(auth.uid).exists()) || (newData.child('command').child('type').val() == 'rename' && data.child('players').child(auth.uid).exists()) || (newData.child('command').child('type').val() == 'start' && data.child('players').child(auth.uid).exists() && (data.child('players').child(auth.uid).child('life').val() == 0 || (data.child('players').child(auth.uid).child('eliminatedAt').val() > 0 && data.child('players').child(auth.uid).child('eliminatedAt').val() + 3600000 <= now)) && data.child('territories').child(newData.child('command').child('to').val()).child('owner').val() == '') || (newData.child('command').child('type').val() == 'request' && data.child('players').child(auth.uid).exists() && (data.child('players').child(auth.uid).child('life').val() == 0 || (data.child('players').child(auth.uid).child('eliminatedAt').val() > 0 && data.child('players').child(auth.uid).child('eliminatedAt').val() + 3600000 <= now)) && data.child('territories').child(newData.child('command').child('to').val()).child('owner').val() != '' && data.child('territories').child(newData.child('command').child('to').val()).child('owner').val() != auth.uid) || (newData.child('command').child('type').val() == 'move' && data.child('territories').child(newData.child('command').child('from').val()).child('owner').val() == auth.uid && data.child('territories').child(newData.child('command').child('from').val()).child('actionReadyAt').val() <= now && (data.child('territories').child(newData.child('command').child('to').val()).child('owner').val() == auth.uid || data.child('territories').child(newData.child('command').child('to').val()).child('protectionUntil').val() <= now)) || (newData.child('command').child('type').val() == 'recruit' && data.child('players').child(auth.uid).exists()) || ((newData.child('command').child('type').val() == 'approve' || newData.child('command').child('type').val() == 'reject') && data.child('requests').child(newData.child('command').child('requestId').val()).child('status').val() == 'pending' && data.child('requests').child(newData.child('command').child('requestId').val()).child('owner').val() == auth.uid && (newData.child('command').child('type').val() == 'reject' || (data.child('requests').child(newData.child('command').child('requestId').val()).child('generation').val() == data.child('territories').child(data.child('requests').child(newData.child('command').child('requestId').val()).child('territoryId').val()).child('generation').val() && data.child('territories').child(data.child('requests').child(newData.child('command').child('requestId').val()).child('territoryId').val()).child('owner').val() == auth.uid && (data.child('players').child(data.child('requests').child(newData.child('command').child('requestId').val()).child('applicant').val()).child('life').val() == 0 || (data.child('players').child(data.child('requests').child(newData.child('command').child('requestId').val()).child('applicant').val()).child('eliminatedAt').val() > 0 && data.child('players').child(data.child('requests').child(newData.child('command').child('requestId').val()).child('applicant').val()).child('eliminatedAt').val() + 3600000 <= now)))))) || (newData.child('command').child('type').val() == 'revive' && data.child('players').child(auth.uid).child('life').val() > 0 && data.child('players').child(auth.uid).child('rulerId').val() == '' && data.child('territories').child(newData.child('command').child('to').val()).child('owner').val() == auth.uid && data.child('territories').child(newData.child('command').child('to').val()).child('actionReadyAt').val() <= now && newData.child('history').child(newData.child('command').child('id').val()).child('total').val() >= 20) || (newData.child('command').child('type').val() == 'announce' && data.child('players').child(auth.uid).exists() && newData.child('command').child('id').val() == 'update-20261027-hundred-heroes' && data.child('release').child('id').val() != 'update-20261027-hundred-heroes')))) && (newData.child('command').child('protocol').val() == 2 || (data.child('featureVersion').val() != 2 && !newData.child('featureVersion').exists()))",
+        ".validate": "newData.hasChildren(['version','mapId','seed','revision','createdAt','updatedAt','territories','command']) && newData.child('version').val() == 1 && newData.child('mapId').val() == 'samguk-90-v2' && newData.child('territories').hasChildren(['xiangping','youbeiping','ji','nanpi','jinyang','ye','pingyuan','beihai','xiapi','pei','shouchun','puyang','chenliu','xuchang','runan','luoyang','wan','changan','shangyong','anding','tianshui','wuwei','jianye','wu','kuaiji','lujiang','chaisang','jiangxia','xinye','xiangyang','jiangling','changsha','guiyang','lingling','wuling','yongan','hanzhong','zitong','jiangzhou','chengdu','jianning','yunnan','hvd_35047','hvd_115491','hvd_32035','hvd_99400','hvd_34191','hvd_115141','hvd_32540','hvd_80840','hvd_35021','hvd_80676','hvd_115676','hvd_116138','hvd_115962','hvd_88476','hvd_116052','hvd_34238','hvd_115146','hvd_115968','hvd_115585','hvd_32221','hvd_115352','hvd_115234','hvd_32525','hvd_116195','hvd_115713','hvd_115781','hvd_115385','hvd_32861','hvd_32362','hvd_115909','hvd_116084','hvd_115183','hvd_87305','hvd_32583','hvd_115859','hvd_115915','hvd_115644','hvd_35031','hvd_115527','hvd_116059','hvd_115754','hvd_115191','hvd_34539','hvd_115078','hvd_115763','hvd_87562','hvd_116004','hvd_115007']) && (!data.exists() || (newData.child('seed').val() == data.child('seed').val() && newData.child('createdAt').val() == data.child('createdAt').val())) && newData.child('updatedAt').val() == newData.child('command').child('at').val() && (newData.hasChildren(['featureVersion','rosterVersion','statsSince']) || (data.child('featureVersion').val() != 2 && !newData.child('featureVersion').exists()))",
+        "version": {
+          ".validate": "newData.isNumber()"
+        },
+        "mapId": {
+          ".validate": "newData.isString()"
+        },
+        "seed": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "revision": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 5000"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 5000"
+        },
+        "command": {
+          ".validate": "newData.hasChildren(['id','type','actor','at','baseRevision']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('actor').val() == auth.uid"
+        },
+        "territories": {
+          "$tid": {
+            ".validate": "$tid.matches(/^(xiangping|youbeiping|ji|nanpi|jinyang|ye|pingyuan|beihai|xiapi|pei|shouchun|puyang|chenliu|xuchang|runan|luoyang|wan|changan|shangyong|anding|tianshui|wuwei|jianye|wu|kuaiji|lujiang|chaisang|jiangxia|xinye|xiangyang|jiangling|changsha|guiyang|lingling|wuling|yongan|hanzhong|zitong|jiangzhou|chengdu|jianning|yunnan|hvd_35047|hvd_115491|hvd_32035|hvd_99400|hvd_34191|hvd_115141|hvd_32540|hvd_80840|hvd_35021|hvd_80676|hvd_115676|hvd_116138|hvd_115962|hvd_88476|hvd_116052|hvd_34238|hvd_115146|hvd_115968|hvd_115585|hvd_32221|hvd_115352|hvd_115234|hvd_32525|hvd_116195|hvd_115713|hvd_115781|hvd_115385|hvd_32861|hvd_32362|hvd_115909|hvd_116084|hvd_115183|hvd_87305|hvd_32583|hvd_115859|hvd_115915|hvd_115644|hvd_35031|hvd_115527|hvd_116059|hvd_115754|hvd_115191|hvd_34539|hvd_115078|hvd_115763|hvd_87562|hvd_116004|hvd_115007)$/) && newData.hasChildren(['id','owner','units','generation','revision','lastRecruitAt','actionReadyAt','protectionUntil']) && newData.child('id').val() == $tid && ((!data.exists() && newData.child('owner').val() == '' && newData.child('revision').val() == 0) || (data.exists() && newData.child('revision').val() == data.child('revision').val() + 1 && ((data.child('owner').val() != '' && newData.child('owner').val() == data.child('owner').val() && newData.child('generation').val() == data.child('generation').val() && newData.child('actionReadyAt').val() == data.child('actionReadyAt').val() && newData.child('protectionUntil').val() == data.child('protectionUntil').val() && (newData.child('units').hasChild('19') ? 20 : (newData.child('units').hasChild('18') ? 19 : (newData.child('units').hasChild('17') ? 18 : (newData.child('units').hasChild('16') ? 17 : (newData.child('units').hasChild('15') ? 16 : (newData.child('units').hasChild('14') ? 15 : (newData.child('units').hasChild('13') ? 14 : (newData.child('units').hasChild('12') ? 13 : (newData.child('units').hasChild('11') ? 12 : (newData.child('units').hasChild('10') ? 11 : (newData.child('units').hasChild('9') ? 10 : (newData.child('units').hasChild('8') ? 9 : (newData.child('units').hasChild('7') ? 8 : (newData.child('units').hasChild('6') ? 7 : (newData.child('units').hasChild('5') ? 6 : (newData.child('units').hasChild('4') ? 5 : (newData.child('units').hasChild('3') ? 4 : (newData.child('units').hasChild('2') ? 3 : (newData.child('units').hasChild('1') ? 2 : (newData.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) >= (data.child('units').hasChild('19') ? 20 : (data.child('units').hasChild('18') ? 19 : (data.child('units').hasChild('17') ? 18 : (data.child('units').hasChild('16') ? 17 : (data.child('units').hasChild('15') ? 16 : (data.child('units').hasChild('14') ? 15 : (data.child('units').hasChild('13') ? 14 : (data.child('units').hasChild('12') ? 13 : (data.child('units').hasChild('11') ? 12 : (data.child('units').hasChild('10') ? 11 : (data.child('units').hasChild('9') ? 10 : (data.child('units').hasChild('8') ? 9 : (data.child('units').hasChild('7') ? 8 : (data.child('units').hasChild('6') ? 7 : (data.child('units').hasChild('5') ? 6 : (data.child('units').hasChild('4') ? 5 : (data.child('units').hasChild('3') ? 4 : (data.child('units').hasChild('2') ? 3 : (data.child('units').hasChild('1') ? 2 : (data.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) && (((newData.child('units').hasChild('19') ? 20 : (newData.child('units').hasChild('18') ? 19 : (newData.child('units').hasChild('17') ? 18 : (newData.child('units').hasChild('16') ? 17 : (newData.child('units').hasChild('15') ? 16 : (newData.child('units').hasChild('14') ? 15 : (newData.child('units').hasChild('13') ? 14 : (newData.child('units').hasChild('12') ? 13 : (newData.child('units').hasChild('11') ? 12 : (newData.child('units').hasChild('10') ? 11 : (newData.child('units').hasChild('9') ? 10 : (newData.child('units').hasChild('8') ? 9 : (newData.child('units').hasChild('7') ? 8 : (newData.child('units').hasChild('6') ? 7 : (newData.child('units').hasChild('5') ? 6 : (newData.child('units').hasChild('4') ? 5 : (newData.child('units').hasChild('3') ? 4 : (newData.child('units').hasChild('2') ? 3 : (newData.child('units').hasChild('1') ? 2 : (newData.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) == (data.child('units').hasChild('19') ? 20 : (data.child('units').hasChild('18') ? 19 : (data.child('units').hasChild('17') ? 18 : (data.child('units').hasChild('16') ? 17 : (data.child('units').hasChild('15') ? 16 : (data.child('units').hasChild('14') ? 15 : (data.child('units').hasChild('13') ? 14 : (data.child('units').hasChild('12') ? 13 : (data.child('units').hasChild('11') ? 12 : (data.child('units').hasChild('10') ? 11 : (data.child('units').hasChild('9') ? 10 : (data.child('units').hasChild('8') ? 9 : (data.child('units').hasChild('7') ? 8 : (data.child('units').hasChild('6') ? 7 : (data.child('units').hasChild('5') ? 6 : (data.child('units').hasChild('4') ? 5 : (data.child('units').hasChild('3') ? 4 : (data.child('units').hasChild('2') ? 3 : (data.child('units').hasChild('1') ? 2 : (data.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) && newData.child('lastRecruitAt').val() == data.child('lastRecruitAt').val()) || ((newData.child('units').hasChild('19') ? 20 : (newData.child('units').hasChild('18') ? 19 : (newData.child('units').hasChild('17') ? 18 : (newData.child('units').hasChild('16') ? 17 : (newData.child('units').hasChild('15') ? 16 : (newData.child('units').hasChild('14') ? 15 : (newData.child('units').hasChild('13') ? 14 : (newData.child('units').hasChild('12') ? 13 : (newData.child('units').hasChild('11') ? 12 : (newData.child('units').hasChild('10') ? 11 : (newData.child('units').hasChild('9') ? 10 : (newData.child('units').hasChild('8') ? 9 : (newData.child('units').hasChild('7') ? 8 : (newData.child('units').hasChild('6') ? 7 : (newData.child('units').hasChild('5') ? 6 : (newData.child('units').hasChild('4') ? 5 : (newData.child('units').hasChild('3') ? 4 : (newData.child('units').hasChild('2') ? 3 : (newData.child('units').hasChild('1') ? 2 : (newData.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) > (data.child('units').hasChild('19') ? 20 : (data.child('units').hasChild('18') ? 19 : (data.child('units').hasChild('17') ? 18 : (data.child('units').hasChild('16') ? 17 : (data.child('units').hasChild('15') ? 16 : (data.child('units').hasChild('14') ? 15 : (data.child('units').hasChild('13') ? 14 : (data.child('units').hasChild('12') ? 13 : (data.child('units').hasChild('11') ? 12 : (data.child('units').hasChild('10') ? 11 : (data.child('units').hasChild('9') ? 10 : (data.child('units').hasChild('8') ? 9 : (data.child('units').hasChild('7') ? 8 : (data.child('units').hasChild('6') ? 7 : (data.child('units').hasChild('5') ? 6 : (data.child('units').hasChild('4') ? 5 : (data.child('units').hasChild('3') ? 4 : (data.child('units').hasChild('2') ? 3 : (data.child('units').hasChild('1') ? 2 : (data.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) && ((newData.child('units').hasChild('19') ? 20 : (newData.child('units').hasChild('18') ? 19 : (newData.child('units').hasChild('17') ? 18 : (newData.child('units').hasChild('16') ? 17 : (newData.child('units').hasChild('15') ? 16 : (newData.child('units').hasChild('14') ? 15 : (newData.child('units').hasChild('13') ? 14 : (newData.child('units').hasChild('12') ? 13 : (newData.child('units').hasChild('11') ? 12 : (newData.child('units').hasChild('10') ? 11 : (newData.child('units').hasChild('9') ? 10 : (newData.child('units').hasChild('8') ? 9 : (newData.child('units').hasChild('7') ? 8 : (newData.child('units').hasChild('6') ? 7 : (newData.child('units').hasChild('5') ? 6 : (newData.child('units').hasChild('4') ? 5 : (newData.child('units').hasChild('3') ? 4 : (newData.child('units').hasChild('2') ? 3 : (newData.child('units').hasChild('1') ? 2 : (newData.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) - (data.child('units').hasChild('19') ? 20 : (data.child('units').hasChild('18') ? 19 : (data.child('units').hasChild('17') ? 18 : (data.child('units').hasChild('16') ? 17 : (data.child('units').hasChild('15') ? 16 : (data.child('units').hasChild('14') ? 15 : (data.child('units').hasChild('13') ? 14 : (data.child('units').hasChild('12') ? 13 : (data.child('units').hasChild('11') ? 12 : (data.child('units').hasChild('10') ? 11 : (data.child('units').hasChild('9') ? 10 : (data.child('units').hasChild('8') ? 9 : (data.child('units').hasChild('7') ? 8 : (data.child('units').hasChild('6') ? 7 : (data.child('units').hasChild('5') ? 6 : (data.child('units').hasChild('4') ? 5 : (data.child('units').hasChild('3') ? 4 : (data.child('units').hasChild('2') ? 3 : (data.child('units').hasChild('1') ? 2 : (data.child('units').hasChild('0') ? 1 : 0))))))))))))))))))))) * 600000 <= now + 5000 - data.child('lastRecruitAt').val() && newData.child('lastRecruitAt').val() >= data.child('lastRecruitAt').val() + ((newData.child('units').hasChild('19') ? 20 : (newData.child('units').hasChild('18') ? 19 : (newData.child('units').hasChild('17') ? 18 : (newData.child('units').hasChild('16') ? 17 : (newData.child('units').hasChild('15') ? 16 : (newData.child('units').hasChild('14') ? 15 : (newData.child('units').hasChild('13') ? 14 : (newData.child('units').hasChild('12') ? 13 : (newData.child('units').hasChild('11') ? 12 : (newData.child('units').hasChild('10') ? 11 : (newData.child('units').hasChild('9') ? 10 : (newData.child('units').hasChild('8') ? 9 : (newData.child('units').hasChild('7') ? 8 : (newData.child('units').hasChild('6') ? 7 : (newData.child('units').hasChild('5') ? 6 : (newData.child('units').hasChild('4') ? 5 : (newData.child('units').hasChild('3') ? 4 : (newData.child('units').hasChild('2') ? 3 : (newData.child('units').hasChild('1') ? 2 : (newData.child('units').hasChild('0') ? 1 : 0)))))))))))))))))))) - (data.child('units').hasChild('19') ? 20 : (data.child('units').hasChild('18') ? 19 : (data.child('units').hasChild('17') ? 18 : (data.child('units').hasChild('16') ? 17 : (data.child('units').hasChild('15') ? 16 : (data.child('units').hasChild('14') ? 15 : (data.child('units').hasChild('13') ? 14 : (data.child('units').hasChild('12') ? 13 : (data.child('units').hasChild('11') ? 12 : (data.child('units').hasChild('10') ? 11 : (data.child('units').hasChild('9') ? 10 : (data.child('units').hasChild('8') ? 9 : (data.child('units').hasChild('7') ? 8 : (data.child('units').hasChild('6') ? 7 : (data.child('units').hasChild('5') ? 6 : (data.child('units').hasChild('4') ? 5 : (data.child('units').hasChild('3') ? 4 : (data.child('units').hasChild('2') ? 3 : (data.child('units').hasChild('1') ? 2 : (data.child('units').hasChild('0') ? 1 : 0))))))))))))))))))))) * 600000))) || data.child('owner').val() == auth.uid || (newData.parent().parent().child('command').child('type').val() == 'move' && newData.parent().parent().child('command').child('to').val() == $tid) || (newData.parent().parent().child('command').child('type').val() == 'start' && newData.parent().parent().child('command').child('to').val() == $tid && data.child('owner').val() == '')))) && (newData.child('owner').val() == data.child('owner').val() || !data.exists() || (newData.parent().parent().child('command').child('type').val() == 'move' && newData.parent().parent().child('command').child('to').val() == $tid && newData.child('owner').val() == auth.uid) || (newData.parent().parent().child('command').child('type').val() == 'start' && newData.parent().parent().child('command').child('to').val() == $tid && data.child('owner').val() == '' && newData.child('owner').val() == auth.uid) || (newData.parent().parent().child('command').child('type').val() == 'approve' && data.parent().parent().child('requests').child(newData.parent().parent().child('command').child('requestId').val()).child('territoryId').val() == $tid && newData.child('owner').val() == data.parent().parent().child('requests').child(newData.parent().parent().child('command').child('requestId').val()).child('applicant').val()))",
+            "id": {
+              ".validate": "newData.isString()"
+            },
+            "owner": {
+              ".validate": "newData.isString() && (newData.val() == '' || newData.parent().parent().parent().child('players').child(newData.val()).exists())"
+            },
+            "units": {
+              ".validate": "newData.hasChild('0') && (!newData.hasChild('1') || newData.hasChild('0')) && (!newData.hasChild('2') || newData.hasChild('1')) && (!newData.hasChild('3') || newData.hasChild('2')) && (!newData.hasChild('4') || newData.hasChild('3')) && (!newData.hasChild('5') || newData.hasChild('4')) && (!newData.hasChild('6') || newData.hasChild('5')) && (!newData.hasChild('7') || newData.hasChild('6')) && (!newData.hasChild('8') || newData.hasChild('7')) && (!newData.hasChild('9') || newData.hasChild('8')) && (!newData.hasChild('10') || newData.hasChild('9')) && (!newData.hasChild('11') || newData.hasChild('10')) && (!newData.hasChild('12') || newData.hasChild('11')) && (!newData.hasChild('13') || newData.hasChild('12')) && (!newData.hasChild('14') || newData.hasChild('13')) && (!newData.hasChild('15') || newData.hasChild('14')) && (!newData.hasChild('16') || newData.hasChild('15')) && (!newData.hasChild('17') || newData.hasChild('16')) && (!newData.hasChild('18') || newData.hasChild('17')) && (!newData.hasChild('19') || newData.hasChild('18'))",
+              "$index": {
+                ".validate": "(($tid == 'nanpi' || $tid == 'ye' || $tid == 'beihai' || $tid == 'xiapi' || $tid == 'shouchun' || $tid == 'xuchang' || $tid == 'luoyang' || $tid == 'changan' || $tid == 'jianye' || $tid == 'wu' || $tid == 'xiangyang' || $tid == 'jiangling' || $tid == 'changsha' || $tid == 'hanzhong' || $tid == 'chengdu') ? $index.matches(/^([0-9]|1[0-9])$/) : (($tid == 'xiangping' || $tid == 'youbeiping' || $tid == 'ji' || $tid == 'jinyang' || $tid == 'pingyuan' || $tid == 'pei' || $tid == 'puyang' || $tid == 'chenliu' || $tid == 'runan' || $tid == 'wan' || $tid == 'shangyong' || $tid == 'anding' || $tid == 'tianshui' || $tid == 'wuwei' || $tid == 'kuaiji' || $tid == 'lujiang' || $tid == 'chaisang' || $tid == 'jiangxia' || $tid == 'xinye' || $tid == 'guiyang' || $tid == 'lingling' || $tid == 'wuling' || $tid == 'yongan' || $tid == 'zitong' || $tid == 'jiangzhou' || $tid == 'jianning' || $tid == 'yunnan') ? $index.matches(/^([0-9]|1[0-5])$/) : $index.matches(/^([0-9]|1[01])$/))) && newData.hasChildren(['id','name','sides','readyAt']) && (!data.parent().parent().exists() || (data.parent().parent().child('owner').val() == auth.uid || (newData.parent().parent().parent().parent().child('command').child('type').val() == 'move' && newData.parent().parent().parent().parent().child('command').child('to').val() == $tid) || (newData.parent().parent().parent().parent().child('command').child('type').val() == 'start' && newData.parent().parent().parent().parent().child('command').child('to').val() == $tid && data.parent().parent().child('owner').val() == '') || (newData.parent().parent().parent().parent().child('command').child('type').val() == 'approve' && data.parent().parent().parent().parent().child('requests').child(newData.parent().parent().parent().parent().child('command').child('requestId').val()).child('territoryId').val() == $tid)) || (data.exists() && newData.child('id').val() == data.child('id').val() && newData.child('sides').val() == data.child('sides').val() && newData.child('readyAt').val() == data.child('readyAt').val() && (newData.child('name').val() == data.child('name').val() || (data.parent().parent().parent().parent().child('rosterVersion').val() != 1 && newData.parent().parent().parent().parent().child('rosterVersion').val() == 1 && !data.child('name').val().matches(/^(유비|조조|손권|관우|장비|조운|마초|황충|여포|장료|전위|허저|하후돈|태사자|감녕|주유|육손|제갈량|사마의|등애|서황|장합|악진|우금|하후연|조인|조홍|문빙|방덕|장임|위연|강유|관평|관흥|장포|마대|황개|정보|한당|주태|장흠|능통|서성|정봉|손견|손책|원소|원술|동탁|맹획|공손찬|유표|유장|마등|한수|장수|장로|이각|곽사|화웅|기령|안량|문추|고순|진궁|순욱|순유|정욱|곽가|가후|서서|방통|법정|마량|마속|유봉|요화|왕평|주창|간옹|미축|미방|손건|관색|장완|비의|동윤|제갈근|제갈각|노숙|여몽|장소|장굉|보즐|우번|진무|동습|반장|유찬|조휴)$/) && ((newData.child('sides').val() == 6 && newData.child('name').val().matches(/^(공손찬|유표|유장|마등|한수|장수|장로|이각|곽사|화웅|기령|안량|문추|고순|진궁|순욱|순유|정욱|곽가|가후|서서|방통|법정|마량|마속|유봉|요화|왕평|주창|간옹|미축|미방|손건|관색|장완|비의|동윤|제갈근|제갈각|노숙|여몽|장소|장굉|보즐|우번|진무|동습|반장|유찬|조휴)$/)) || (newData.child('sides').val() == 8 && newData.child('name').val().matches(/^(서황|장합|악진|우금|하후연|조인|조홍|문빙|방덕|장임|위연|강유|관평|관흥|장포|마대|황개|정보|한당|주태|장흠|능통|서성|정봉|손견|손책|원소|원술|동탁|맹획)$/)) || (newData.child('sides').val() == 12 && newData.child('name').val().matches(/^(유비|조조|손권|관우|장비|조운|마초|황충|여포|장료|전위|허저|하후돈|태사자|감녕|주유|육손|제갈량|사마의|등애)$/)))))) || (!data.exists() && newData.child('sides').val() != 20 && newData.child('readyAt').val() >= data.parent().parent().child('lastRecruitAt').val() + 600000 && (newData.child('readyAt').val() - data.parent().parent().child('lastRecruitAt').val()) % 600000 == 0 && newData.child('readyAt').val() <= now + 5000 && newData.child('id').val() == 'recruit:' + $tid + ':' + data.parent().parent().child('generation').val() + ':' + newData.child('readyAt').val() && (newData.child('sides').val() == 4 || newData.child('name').val().matches(/^(유비|조조|손권|관우|장비|조운|마초|황충|여포|장료|전위|허저|하후돈|태사자|감녕|주유|육손|제갈량|사마의|등애|서황|장합|악진|우금|하후연|조인|조홍|문빙|방덕|장임|위연|강유|관평|관흥|장포|마대|황개|정보|한당|주태|장흠|능통|서성|정봉|손견|손책|원소|원술|동탁|맹획|공손찬|유표|유장|마등|한수|장수|장로|이각|곽사|화웅|기령|안량|문추|고순|진궁|순욱|순유|정욱|곽가|가후|서서|방통|법정|마량|마속|유봉|요화|왕평|주창|간옹|미축|미방|손건|관색|장완|비의|동윤|제갈근|제갈각|노숙|여몽|장소|장굉|보즐|우번|진무|동습|반장|유찬|조휴)$/))))",
+                "id": {
+                  ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 256"
+                },
+                "name": {
+                  ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 32"
+                },
+                "sides": {
+                  ".validate": "newData.val() == 4 || newData.val() == 6 || newData.val() == 8 || newData.val() == 12 || newData.val() == 20"
+                },
+                "readyAt": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 605000"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "generation": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0"
+            },
+            "revision": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0"
+            },
+            "lastRecruitAt": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 5000"
+            },
+            "actionReadyAt": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 605000"
+            },
+            "protectionUntil": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 1205000 && (!data.exists() || newData.val() <= data.val() || newData.parent().parent().parent().child('command').child('type').val() == 'start' || newData.parent().parent().parent().child('command').child('type').val() == 'approve')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "players": {
+          "$uid": {
+            ".validate": "newData.hasChildren(['uid','name','color','joinedAt','life','eliminatedAt','startedAt','captures','defeats']) && newData.child('uid').val() == $uid && ((!data.exists() && $uid == auth.uid && newData.parent().parent().child('command').child('type').val() == 'register' && newData.child('life').val() == 0) || (data.exists() && ((newData.child('name').val() == data.child('name').val() && newData.child('nameChosen').val() == data.child('nameChosen').val()) || ($uid == auth.uid && newData.parent().parent().child('command').child('type').val() == 'rename' && newData.child('nameChosen').val() == true)) && newData.child('color').val() == data.child('color').val() && newData.child('joinedAt').val() == data.child('joinedAt').val() && ((newData.child('uid').val() == data.child('uid').val() && newData.child('name').val() == data.child('name').val() && newData.child('nameChosen').val() == data.child('nameChosen').val() && newData.child('color').val() == data.child('color').val() && newData.child('joinedAt').val() == data.child('joinedAt').val() && newData.child('life').val() == data.child('life').val() && newData.child('eliminatedAt').val() == data.child('eliminatedAt').val() && newData.child('startedAt').val() == data.child('startedAt').val() && newData.child('captures').val() == data.child('captures').val() && newData.child('defeats').val() == data.child('defeats').val()) || $uid == auth.uid || (newData.parent().parent().child('command').child('type').val() == 'move' && data.parent().parent().child('territories').child(newData.parent().parent().child('command').child('to').val()).child('owner').val() == $uid) || (newData.parent().parent().child('command').child('type').val() == 'approve' && data.parent().parent().child('requests').child(newData.parent().parent().child('command').child('requestId').val()).child('applicant').val() == $uid)))) && (newData.hasChildren(['kills','deaths','revived','exchanged','rulerId']) || newData.parent().parent().child('featureVersion').val() != 2)",
+            "uid": {
+              ".validate": "newData.isString()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 16"
+            },
+            "nameChosen": {
+              ".validate": "newData.val() == true"
+            },
+            "color": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 15 && newData.val() % 1 == 0"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= now + 5000"
+            },
+            "life": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0"
+            },
+            "eliminatedAt": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 5000"
+            },
+            "startedAt": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 5000"
+            },
+            "captures": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0"
+            },
+            "defeats": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0"
+            },
+            "$other": {
+              ".validate": false
+            },
+            "kills": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0 && ((!data.exists() && newData.val() == 0) || newData.val() == data.val() || (newData.parent().parent().parent().child('command').child('type').val() == 'move' && ('kills' == 'kills' || 'kills' == 'deaths') && ($uid == auth.uid || data.parent().parent().parent().child('territories').child(newData.parent().parent().parent().child('command').child('to').val()).child('owner').val() == $uid) && newData.val() >= (data.exists() ? data.val() : 0)) || (newData.parent().parent().parent().child('command').child('type').val() == 'revive' && $uid == auth.uid && ('kills' == 'revived' || 'kills' == 'exchanged') && newData.val() >= (data.exists() ? data.val() : 0)))"
+            },
+            "deaths": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0 && ((!data.exists() && newData.val() == 0) || newData.val() == data.val() || (newData.parent().parent().parent().child('command').child('type').val() == 'move' && ('deaths' == 'kills' || 'deaths' == 'deaths') && ($uid == auth.uid || data.parent().parent().parent().child('territories').child(newData.parent().parent().parent().child('command').child('to').val()).child('owner').val() == $uid) && newData.val() >= (data.exists() ? data.val() : 0)) || (newData.parent().parent().parent().child('command').child('type').val() == 'revive' && $uid == auth.uid && ('deaths' == 'revived' || 'deaths' == 'exchanged') && newData.val() >= (data.exists() ? data.val() : 0)))"
+            },
+            "revived": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0 && ((!data.exists() && newData.val() == 0) || newData.val() == data.val() || (newData.parent().parent().parent().child('command').child('type').val() == 'move' && ('revived' == 'kills' || 'revived' == 'deaths') && ($uid == auth.uid || data.parent().parent().parent().child('territories').child(newData.parent().parent().parent().child('command').child('to').val()).child('owner').val() == $uid) && newData.val() >= (data.exists() ? data.val() : 0)) || (newData.parent().parent().parent().child('command').child('type').val() == 'revive' && $uid == auth.uid && ('revived' == 'revived' || 'revived' == 'exchanged') && newData.val() >= (data.exists() ? data.val() : 0)))"
+            },
+            "exchanged": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 == 0 && ((!data.exists() && newData.val() == 0) || newData.val() == data.val() || (newData.parent().parent().parent().child('command').child('type').val() == 'move' && ('exchanged' == 'kills' || 'exchanged' == 'deaths') && ($uid == auth.uid || data.parent().parent().parent().child('territories').child(newData.parent().parent().parent().child('command').child('to').val()).child('owner').val() == $uid) && newData.val() >= (data.exists() ? data.val() : 0)) || (newData.parent().parent().parent().child('command').child('type').val() == 'revive' && $uid == auth.uid && ('exchanged' == 'revived' || 'exchanged' == 'exchanged') && newData.val() >= (data.exists() ? data.val() : 0)))"
+            },
+            "rulerId": {
+              ".validate": "newData.isString() && (newData.val() == data.val() || !data.exists() || $uid == auth.uid || (newData.parent().parent().parent().child('command').child('type').val() == 'move' && data.parent().parent().parent().child('territories').child(newData.parent().parent().parent().child('command').child('to').val()).child('owner').val() == $uid) || (newData.parent().parent().parent().child('command').child('type').val() == 'approve' && newData.parent().parent().parent().child('requests').child(newData.parent().parent().parent().child('command').child('requestId').val()).child('applicant').val() == $uid))"
+            }
+          }
+        },
+        "requests": {},
+        "history": {
+          ".indexOn": [
+            "at"
+          ]
+        },
+        "receipts": {},
+        "$other": {
+          ".validate": false
+        },
+        "featureVersion": {
+          ".validate": "newData.val() == 2"
+        },
+        "rosterVersion": {
+          ".validate": "newData.val() == 1"
+        },
+        "statsSince": {
+          ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= now + 5000 && (!data.exists() || newData.val() == data.val())"
+        },
+        "release": {
+          ".validate": "newData.hasChildren(['id','text','at']) && ((newData.child('id').val() == data.child('id').val() && newData.child('text').val() == data.child('text').val() && newData.child('at').val() == data.child('at').val()) || (newData.parent().child('command').child('type').val() == 'announce' && newData.child('id').val() == 'update-20261027-hundred-heroes' && newData.child('text').val() == newData.parent().child('history').child('update-20261027-hundred-heroes').child('text').val() && newData.child('at').val() == newData.parent().child('command').child('at').val()))"
+        }
+      }
+    },
+    "chat": {
+      "global": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider == 'google.com'",
+        ".write": "(auth != null && auth.token.firebase.sign_in_provider == 'google.com' && newData.exists() && newData.child('sequence').val() == (data.child('sequence').exists() ? data.child('sequence').val() : 0) + 1 && newData.child('lastSent').child(auth.uid).val() == now && (!data.child('lastSent').child(auth.uid).exists() || now - data.child('lastSent').child(auth.uid).val() >= 1000) && newData.child('messages').child('' + (newData.child('sequence').val() % 50)).child('uid').val() == auth.uid && newData.child('messages').child('' + (newData.child('sequence').val() % 50)).child('at').val() == now && newData.child('messages').child('' + (newData.child('sequence').val() % 50)).child('kind').val() != 'system') || (auth != null && auth.token.firebase.sign_in_provider == 'google.com' && newData.exists() && newData.parent().parent().child('worlds').child('main').child('revision').val() == data.parent().parent().child('worlds').child('main').child('revision').val() + 1 && newData.parent().parent().child('worlds').child('main').child('command').child('actor').val() == auth.uid && newData.child('sequence').val() > (data.child('sequence').exists() ? data.child('sequence').val() : 0) && newData.child('sequence').val() <= (data.child('sequence').exists() ? data.child('sequence').val() : 0) + 100 && newData.child('messages').child('' + (newData.child('sequence').val() % 50)).child('kind').val() == 'system')",
+        ".validate": "newData.hasChildren(['sequence','messages'])",
+        "sequence": {
+          ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() % 1 == 0"
+        },
+        "messages": {
+          "$slot": {
+            ".validate": "$slot.matches(/^([0-9]|[1-4][0-9])$/) && newData.hasChildren(['seq','uid','name','text','at']) && ((newData.child('seq').val() == data.child('seq').val() && newData.child('uid').val() == data.child('uid').val() && newData.child('name').val() == data.child('name').val() && newData.child('text').val() == data.child('text').val() && newData.child('at').val() == data.child('at').val() && newData.child('kind').val() == data.child('kind').val() && newData.child('eventId').val() == data.child('eventId').val()) || (newData.child('uid').val() == auth.uid && newData.child('seq').val() > (data.parent().parent().child('sequence').exists() ? data.parent().parent().child('sequence').val() : 0) && newData.child('seq').val() <= newData.parent().parent().child('sequence').val() && $slot == '' + (newData.child('seq').val() % 50) && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 5000 && ((newData.child('kind').val() != 'system' && !newData.child('eventId').exists() && newData.child('seq').val() == newData.parent().parent().child('sequence').val()) || (newData.child('kind').val() == 'system' && newData.child('name').val() == '전령' && newData.parent().parent().parent().parent().child('worlds').child('main').child('revision').val() == data.parent().parent().parent().parent().child('worlds').child('main').child('revision').val() + 1 && newData.parent().parent().parent().parent().child('worlds').child('main').child('command').child('actor').val() == auth.uid && (newData.parent().parent().parent().parent().child('worlds').child('main').child('history').child(newData.child('eventId').val()).child('type').val() == 'hero' || newData.parent().parent().parent().parent().child('worlds').child('main').child('history').child(newData.child('eventId').val()).child('type').val() == 'revive' || newData.parent().parent().parent().parent().child('worlds').child('main').child('history').child(newData.child('eventId').val()).child('type').val() == 'update') && newData.parent().parent().parent().parent().child('worlds').child('main').child('history').child(newData.child('eventId').val()).child('text').val() == newData.child('text').val() && !data.parent().parent().parent().parent().child('worlds').child('main').child('history').child(newData.child('eventId').val()).exists()))))",
+            "seq": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() % 1 == 0"
+            },
+            "uid": {
+              ".validate": "newData.isString()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 16"
+            },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            },
+            "kind": {
+              ".validate": "newData.val() == 'system'"
+            },
+            "eventId": {
+              ".validate": "newData.isString()"
+            }
+          }
+        },
+        "lastSent": {
+          "$uid": {
+            ".validate": "newData.isNumber() && (($uid == auth.uid && newData.val() == now) || newData.val() == data.val())"
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
