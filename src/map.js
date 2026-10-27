@@ -13,7 +13,7 @@ export class TerritoryMap {
     this.landPath=softenedLandPath(this.land,this.original,d3);
     const geometry=new Map(sharedEdges(MAP.layout.cells).map(c=>[c.id,c]));
     this.cells=MAP.places.map(p=>({...p,path:geometry.get(p.id).path,point:softenPoint(this.original(p.coord))}));
-    this.zoomBehavior=d3.zoom().scaleExtent([1,4]).on('zoom',event=>{this.zoom=event.transform;this.geography?.attr('transform',this.zoom);this.labels();});
+    this.zoomBehavior=d3.zoom().clickDistance(5).scaleExtent([1,4]).on('zoom',event=>{this.zoom=event.transform;this.geography?.attr('transform',this.zoom);this.labels();});
     container.querySelector('[data-zoom="in"]').onclick=()=>this.svg.call(this.zoomBehavior.scaleBy,1.4);
     container.querySelector('[data-zoom="out"]').onclick=()=>this.svg.call(this.zoomBehavior.scaleBy,1/1.4);
     container.querySelector('[data-zoom="all"]').onclick=()=>this.svg.call(this.zoomBehavior.transform,d3.zoomIdentity);
@@ -32,7 +32,7 @@ export class TerritoryMap {
     this.geography=this.svg.append('g');const base=this.geography.append('g').attr('transform',`translate(${this.offset}) scale(${this.ratio})`);
     base.append('path').attr('d',this.landPath).attr('class','map-land-shadow').attr('transform','translate(0,4)');base.append('path').attr('d',this.landPath).attr('class','map-land-base');
     const regionLayer=base.append('g').attr('clip-path','url(#game-land-clip)');
-    this.regions=regionLayer.selectAll('a').data(this.cells,p=>p.id).join('a').attr('href','#').attr('role','button').attr('class','territory-link').on('click',(event,p)=>{event.preventDefault();this.onSelect(p.id);}).on('keydown',(event,p)=>{if(event.key===' '){event.preventDefault();this.onSelect(p.id);}});
+    this.regions=regionLayer.selectAll('a').data(this.cells,p=>p.id).join('a').attr('href','#').attr('role','button').attr('class','territory-link').on('click',(event,p)=>{if(event.defaultPrevented)return;event.preventDefault();this.onSelect(p.id);}).on('keydown',(event,p)=>{if(event.key===' '){event.preventDefault();this.onSelect(p.id);}});
     this.regions.append('path').attr('class','territory-shape').attr('d',p=>p.path);
     regionLayer.append('path').attr('d',this.landPath).attr('filter','url(#game-map-grain)').attr('opacity',.045).attr('pointer-events','none');
     this.symbols=this.svg.append('g').attr('class','map-symbol-layer').attr('pointer-events','none');this.labelLayer=this.svg.append('g').attr('class','map-label-layer').attr('pointer-events','none');

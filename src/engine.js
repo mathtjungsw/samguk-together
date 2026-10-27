@@ -2,6 +2,7 @@ import DATA from './data/game-data.json' with {type:'json'};
 
 export const MAP=DATA;
 export const MINUTE=60_000;
+export const RELEASE=Object.freeze({id:'update-20261027-hundred-heroes',text:'📣 업데이트 완료: 지도 2종·우측 정보창, 영토 재클릭 해제, 랭킹·전투 통계, 무장 100인·초상, 장수 등장 알림, 군주 부활을 적용했습니다. 제외된 기존 장수는 같은 등급으로 교체했습니다. 처치·전사는 이번 업데이트부터 집계합니다. 화면이 그대로면 새로고침해 주세요.'});
 export const RULES=Object.freeze({recruitMs:10*MINUTE,actionMs:10*MINUTE,restartMs:60*MINUTE,protectionMs:20*MINUTE,attackMultiplier:.9,attackLoss:.4,defenseLoss:.2,historyLimit:100,chatLimit:50});
 export const RANKS=Object.freeze({normal:{name:'일반 영토',capacity:12,neutral:2},stronghold:{name:'요충지',capacity:16,neutral:4},citadel:{name:'대거점',capacity:20,neutral:6}});
 export const TIERS={4:'병사',6:'부장',8:'장수',12:'장군',20:'군주'};
@@ -28,7 +29,7 @@ export function unitTier(roll){return roll<.8?4:roll<.95?6:roll<.99?8:12;}
 export function createWorld(now=Date.now(),seed='samguk-main'){
   const territories={};
   for(const p of DATA.places)territories[p.id]={id:p.id,owner:'',units:Array.from({length:RANKS[p.rank].neutral},(_,i)=>({id:`neutral:${p.id}:${i}`,name:'중립 병사',sides:4,readyAt:0})),generation:0,revision:0,lastRecruitAt:now,actionReadyAt:0,protectionUntil:0};
-  return {version:1,mapId:DATA.mapId,seed,revision:0,createdAt:now,updatedAt:now,players:{},territories,requests:{},history:{},receipts:{},command:{id:'initial',type:'init',actor:'',at:now,baseRevision:-1}};
+  return {version:1,featureVersion:2,rosterVersion:1,statsSince:now,mapId:DATA.mapId,seed,revision:0,createdAt:now,updatedAt:now,players:{},territories,requests:{},history:{},receipts:{},command:{id:'initial',type:'init',actor:'',at:now,baseRevision:-1,protocol:2}};
 }
 export function normalizeWorld(raw){
   requireGame(raw&&raw.version===1&&raw.mapId===DATA.mapId,'전장 저장 버전이 다릅니다. 기존 기록을 보존했어요.','VERSION');
@@ -41,8 +42,21 @@ export function normalizeWorld(raw){
     for(const key of ['generation','revision','lastRecruitAt','actionReadyAt','protectionUntil'])requireGame(Number.isFinite(t[key])&&t[key]>=0,'영토의 시간 기록을 확인할 수 없어요.','CORRUPT');
     for(const u of t.units){requireGame(u&&typeof u.id==='string'&&!unitIds.has(u.id)&&TIERS[u.sides]&&typeof u.name==='string'&&Number.isFinite(u.readyAt),'중복되거나 손상된 병력 기록입니다.','CORRUPT');unitIds.add(u.id);}
   }
-  for(const [uid,p] of Object.entries(s.players))requireGame(p.uid===uid&&typeof p.name==='string'&&Number.isInteger(p.life)&&p.life>=0&&Number.isFinite(p.eliminatedAt),'군주의 기록을 확인할 수 없어요.','CORRUPT');
+  for(const [uid,p] of Object.entries(s.players)){requireGame(p.uid===uid&&typeof p.name==='string'&&Number.isInteger(p.life)&&p.life>=0&&Number.isFinite(p.eliminatedAt),'군주의 기록을 확인할 수 없어요.','CORRUPT');for(const key of ['kills','deaths','revived','exchanged'])requireGame(p[key]===undefined||Number.isInteger(p[key])&&p[key]>=0,'전투 통계 기록을 확인할 수 없어요.','CORRUPT');}
   return s;
+}
+export function migrateRoster(s){
+  if(s.rosterVersion===1)return 0;
+  const names=new Set(DATA.roster.map(h=>h.name));let changed=0;
+  for(const uid of Object.keys(s.players).sort()){
+    const living=new Set(ownedTerritories(s,uid).flatMap(t=>t.units.filter(u=>u.sides>4&&u.sides<20&&names.has(u.name)).map(u=>u.name)));
+    for(const t of ownedTerritories(s,uid).sort((a,b)=>a.id.localeCompare(b.id)))for(const unit of t.units){
+      if(![6,8,12].includes(unit.sides)||names.has(unit.name))continue;
+      const all=rosterByTier[unit.sides],available=all.filter(h=>!living.has(h.name)),pool=available.length?available:all;
+      unit.name=pool[hash32(`${s.seed}:roster:${unit.id}`)%pool.length].name;living.add(unit.name);changed++;
+    }
+  }
+  s.rosterVersion=1;return changed;
 }
 function recruitedUnit(s,t,at){
   const rng=seededRandom(`${s.seed}:${t.id}:${t.generation}:${at}`),sides=unitTier(rng());
@@ -50,7 +64,8 @@ function recruitedUnit(s,t,at){
   // Living names are unique within one player's army. Fallen officers may return.
   const living=new Set(ownedTerritories(s,t.owner).flatMap(x=>x.units.filter(u=>u.sides>4&&u.sides<20).map(u=>u.name)));
   const candidates=roster.filter(h=>!living.has(h.name));
-  const hero=candidates.length?candidates[Math.floor(rng()*candidates.length)]:null;
+  const pool=candidates.length?candidates:roster;
+  const hero=pool.length?pool[Math.floor(rng()*pool.length)]:null;
   return {id:`recruit:${t.id}:${t.generation}:${at}`,name:hero?.name||'병사',sides:hero?sides:4,readyAt:at};
 }
 export function materializeTerritory(s,id,now){
@@ -63,8 +78,38 @@ export function materializeTerritory(s,id,now){
 }
 export function projectWorld(world,now){
   const s=structuredClone(world);
-  for(const id of Object.keys(s.territories))materializeTerritory(s,id,now);
+  migrateRoster(s);
+  settleRecruitment(s,now);
   return s;
+}
+export function hasDueRecruitment(s,now){return Object.values(s.territories).some(t=>t.owner&&t.units.length<capacityOf(t.id)&&t.lastRecruitAt+RULES.recruitMs<=now);}
+export function settleRecruitment(s,now){
+  const news=[];
+  // Projection and persistence reserve names in the same chronological order.
+  for(;;){
+    const due=Object.values(s.territories).filter(t=>t.owner&&t.units.length<capacityOf(t.id)&&t.lastRecruitAt+RULES.recruitMs<=now).sort((a,b)=>a.lastRecruitAt-b.lastRecruitAt||a.id.localeCompare(b.id));
+    if(!due.length)break;
+    const t=due[0],at=t.lastRecruitAt+RULES.recruitMs,unit=recruitedUnit(s,t,at);t.units.push(unit);t.lastRecruitAt=at;
+    if(t.units.length>=capacityOf(t.id))t.lastRecruitAt=now;
+    if(unit.sides>4)news.push({id:unit.id,type:'hero',at,actor:t.owner,to:t.id,unit:{...unit},text:`${s.players[t.owner].name} 군주의 ${placeInfo(t.id).ko}에 ${TIERS[unit.sides]} ${unit.name}(D${unit.sides})이 합류했습니다.`});
+  }
+  return news;
+}
+export function leaderboard(s,sort='territories'){
+  const keys={territories:['territories','army','kills'],army:['army','territories','kills'],kills:['kills','territories','army'],deaths:['deaths','territories','army']}[sort]||['territories','army','kills'];
+  const rows=Object.values(s.players).map(p=>{const lands=ownedTerritories(s,p.uid);return {...p,territories:lands.length,army:lands.reduce((n,t)=>n+t.units.length,0),kills:p.kills||0,deaths:p.deaths||0};});
+  rows.sort((a,b)=>keys.reduce((n,key)=>n||(b[key]-a[key]),0)||a.joinedAt-b.joinedAt||a.uid.localeCompare(b.uid));
+  let rank=0;return rows.map((r,i)=>{if(!i||keys.some(key=>r[key]!==rows[i-1][key]))rank=i+1;return {...r,rank};});
+}
+export function validateRevival(s,uid,id,ids,now){
+  const t=s.territories[id];if(!t||t.owner!==uid)return '내 영토에서 군주를 살릴 수 있습니다.';
+  if(ownedTerritories(s,uid).some(t=>t.units.some(u=>u.sides===20)))return '군주가 이미 생존해 있습니다.';
+  if(now<t.actionReadyAt)return `이 영토의 다음 행동까지 ${clockText(t.actionReadyAt-now)} 남았어요.`;
+  if(!Array.isArray(ids)||!ids.length||new Set(ids).size!==ids.length)return '교환할 병력을 선택해 주세요.';
+  const units=ids.map(id=>t.units.find(u=>u.id===id));
+  if(units.some(u=>!u||![4,6,8,12].includes(u.sides)||u.readyAt>now))return '이 영토에서 행동 가능한 D4·D6·D8·D12만 교환할 수 있어요.';
+  if(units.reduce((n,u)=>n+u.sides,0)<20)return '선택한 병력의 면수 합계가 20 이상이어야 합니다.';
+  return null;
 }
 export function nextRecruitAt(t){return !t.owner||t.units.length>=capacityOf(t.id)?0:t.lastRecruitAt+RULES.recruitMs;}
 export function restartAvailableAt(player){return player?.life>0?player.eliminatedAt+RULES.restartMs:0;}
@@ -116,6 +161,8 @@ function executeMove(s,uid,c,now){
     s.players[uid].captures++;
     if(defender&&ownedTerritories(s,defender).length===0){s.players[defender].eliminatedAt=now;s.players[defender].defeats++;}
   }else{attackDead=selected;const loss=losses(b.units,selected.length,RULES.defenseLoss);defendDead=loss.dead;defendSurvivors=loss.survivors;b.units=defendSurvivors;}
+  s.players[uid].kills+=defendDead.length;s.players[uid].deaths+=attackDead.length;
+  if(defender){s.players[defender].kills+=attackDead.length;s.players[defender].deaths+=defendDead.length;}
   const result={friendly:false,from:c.from,to:c.to,attacker:uid,defender,attack,defend,raw,score,defense,won,attackDead,defendDead,stationed,returned,defendSurvivors};
   logEvent(s,c,{type:'battle',from:c.from,to:c.to,text:`${s.players[uid].name} · ${placeInfo(c.to).ko} ${won?'점령':'공격 실패'} · ${score}:${defense} · 공격군 −${attackDead.length} / 수비군 −${defendDead.length}`,result});
 }
@@ -129,9 +176,14 @@ export function applyCommand(raw,actor,command,now=command.at){
   requireGame(Number.isFinite(now)&&now>=s.updatedAt,'전장의 시간을 다시 확인하고 있어요.','CLOCK');
   const c={...command,actor,at:now};
   const before=structuredClone(s.territories);
+  s.featureVersion=2;s.statsSince??=now;
+  for(const p of Object.values(s.players)){p.kills??=0;p.deaths??=0;p.revived??=0;p.exchanged??=0;}
+  for(const [id,expected] of Object.entries(c.expectedTerritories||{}))requireGame(s.territories[id]?.revision===expected,'선택한 영토의 전황이 달라졌어요. 병력을 다시 확인해 주세요.','TERRITORY_CONFLICT');
+  migrateRoster(s);
+  const recruitment=settleRecruitment(s,now);
   if(c.type==='register'){
     requireGame(!s.players[actor],'이미 전장에 입장한 군주입니다.');
-    const name=cleanName(c.name);s.players[actor]={uid:actor,name,nameChosen:true,color:Object.keys(s.players).length%COLORS.length,joinedAt:now,life:0,eliminatedAt:0,startedAt:0,captures:0,defeats:0};
+    const name=cleanName(c.name);s.players[actor]={uid:actor,name,nameChosen:true,color:Object.keys(s.players).length%COLORS.length,joinedAt:now,life:0,eliminatedAt:0,startedAt:0,captures:0,defeats:0,kills:0,deaths:0,revived:0,exchanged:0,rulerId:''};
     logEvent(s,c,{type:'register',text:`${name}님이 전장에 들어왔습니다.`});
   }else{
     requireGame(s.players[actor],'먼저 전장에 입장해 주세요.');
@@ -164,13 +216,23 @@ export function applyCommand(raw,actor,command,now=command.at){
         const p=beginLife(s,r.applicant,t.id,now);r.status='approved';r.resolvedAt=now;
         logEvent(s,c,{type:'approve',to:t.id,text:`${s.players[actor].name}님이 ${placeInfo(t.id).ko} 양도를 승인했습니다. ${p.name}님이 새로 시작합니다.`});
       }
+    }else if(c.type==='revive'){
+      const t=materializeTerritory(s,c.territoryId,now),error=validateRevival(s,actor,c.territoryId,c.unitIds,now);requireGame(!error,error);
+      const units=t.units.filter(u=>c.unitIds.includes(u.id)),sum=units.reduce((n,u)=>n+u.sides,0),p=s.players[actor];t.units=t.units.filter(u=>!c.unitIds.includes(u.id));
+      const unit={id:`${actor}:life:${p.life}:ruler:${c.id}`,name:p.name,sides:20,readyAt:now+RULES.actionMs};t.units.push(unit);t.actionReadyAt=now+RULES.actionMs;p.revived++;p.exchanged+=units.length;
+      logEvent(s,c,{type:'revive',to:t.id,unit,cost:units.length,total:sum,text:`${p.name} 군주가 ${placeInfo(t.id).ko}에서 병력 ${units.length}명(합계 ${sum})과 교환해 부활했습니다.`});
+    }else if(c.type==='announce'){
+      requireGame(c.id===RELEASE.id&&s.release?.id!==RELEASE.id,'이미 안내한 업데이트입니다.');
+      s.release={id:RELEASE.id,text:RELEASE.text,at:now};logEvent(s,c,{type:'update',text:RELEASE.text});
     }else if(c.type==='recruit'){
-      requireGame(ownedTerritories(s,actor).length,'충원할 내 영토가 없습니다.');for(const t of ownedTerritories(s,actor))materializeTerritory(s,t.id,now);
-      logEvent(s,c,{type:'recruit',text:`${s.players[actor].name}님의 병력 충원을 기록했습니다.`});
+      // All due territories are settled above, even while their owner is away.
     }else throw new GameError('알 수 없는 명령입니다.');
   }
+  for(const event of recruitment)s.history[event.id]=event;
+  s.history=trimObject(s.history,RULES.historyLimit);
+  for(const p of Object.values(s.players))p.rulerId=ownedTerritories(s,p.uid).flatMap(t=>t.units).find(u=>u.sides===20)?.id||'';
   for(const [id,t] of Object.entries(s.territories))if(JSON.stringify({...t,revision:0})!==JSON.stringify({...before[id],revision:0}))t.revision=before[id].revision+1;
-  s.revision++;s.updatedAt=now;s.command={id:c.id,type:c.type,actor,at:now,baseRevision:command.baseRevision,from:c.from||'',to:c.to||c.territoryId||'',requestId:c.requestId||'',seed:c.seed??0};
+  s.revision++;s.updatedAt=now;s.command={id:c.id,type:c.type,actor,at:now,baseRevision:command.baseRevision,from:c.from||'',to:c.to||c.territoryId||'',requestId:c.requestId||'',seed:c.seed??0,protocol:2};
   s.receipts[c.id]={at:now,actor};s.receipts=trimObject(s.receipts,100);
   normalizeWorld(s);return s;
 }
@@ -191,3 +253,10 @@ export function addChatMessage(raw,uid,name,text,now){
   return state;
 }
 export const chatMessages=raw=>Object.values(raw?.messages||{}).filter(Boolean).sort((a,b)=>a.seq-b.seq).slice(-RULES.chatLimit);
+export const systemEvents=(before,after)=>Object.values(after.history).filter(e=>['hero','revive','update'].includes(e.type)&&!before.history?.[e.id]).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));
+export function appendSystemMessages(raw,events,uid,now){
+  const state=structuredClone(raw||{sequence:0,messages:{},lastSent:{}});state.messages??={};state.lastSent??={};
+  const existing=new Set(Object.values(state.messages).filter(Boolean).map(m=>m.eventId).filter(Boolean));
+  for(const event of events){if(existing.has(event.id))continue;const seq=++state.sequence;state.messages[String(seq%RULES.chatLimit)]={seq,uid,name:'전령',text:event.text.slice(0,200),at:now,kind:'system',eventId:event.id};existing.add(event.id);}
+  return state;
+}

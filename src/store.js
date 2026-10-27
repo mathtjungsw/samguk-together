@@ -1,4 +1,4 @@
-import {createWorld,normalizeWorld,applyCommand,addChatMessage,GameError,RULES} from './engine.js';
+import {createWorld,normalizeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
 export const commandId=()=>crypto.randomUUID();
 export const entropy=()=>crypto.getRandomValues(new Uint32Array(1))[0];
@@ -17,7 +17,7 @@ export class LocalStore {
   readWorld(){const text=this.storage.getItem(this.key);if(!text)return createWorld(this.now(),'practice-world-v1');try{return normalizeWorld(JSON.parse(text));}catch(error){throw new GameError('이 기기의 연습 기록을 읽지 못했어요. 원본 기록을 보존했습니다.','CORRUPT');}}
   refresh(){try{this.world=this.readWorld();this.chat=JSON.parse(this.storage.getItem(this.chatKey)||'null');this.onWorld(this.world);this.onChat(this.chat);}catch(error){this.onConnection(false,error.message);}}
   async connect(name,uid){this.uid=uid||`practice-${crypto.randomUUID()}`;await this.locked(()=>{let world=this.readWorld();if(!world.players[this.uid])world=applyCommand(world,this.uid,{id:commandId(),type:'register',name,at:Math.max(this.now(),world.updatedAt),baseRevision:world.revision});this.storage.setItem(this.key,JSON.stringify(world));});this.refresh();this.channel?.postMessage('updated');return this.world.players[this.uid];}
-  async submit(spec){return this.locked(()=>{const world=this.readWorld(),c={...spec,id:spec.id||commandId(),at:Math.max(this.now(),world.updatedAt),baseRevision:world.revision};const next=applyCommand(world,this.uid,c);this.storage.setItem(this.key,JSON.stringify(next));this.world=next;this.onWorld(next);this.channel?.postMessage('updated');return {world:next,event:next.history[c.id]||null};});}
+  async submit(spec){return this.locked(()=>{const world=this.readWorld(),c={...spec,id:spec.id||commandId(),at:Math.max(this.now(),world.updatedAt),baseRevision:world.revision};const next=applyCommand(world,this.uid,c),events=systemEvents(world,next);if(events.length){this.chat=appendSystemMessages(JSON.parse(this.storage.getItem(this.chatKey)||'null'),events,this.uid,c.at);this.storage.setItem(this.chatKey,JSON.stringify(this.chat));}this.storage.setItem(this.key,JSON.stringify(next));this.world=next;this.onWorld(next);if(events.length)this.onChat(this.chat);this.channel?.postMessage('updated');return {world:next,event:next.history[c.id]||null};});}
   async sendChat(text){return this.locked(()=>{const raw=JSON.parse(this.storage.getItem(this.chatKey)||'null');const next=addChatMessage(raw,this.uid,this.world.players[this.uid].name,text,this.now());this.storage.setItem(this.chatKey,JSON.stringify(next));this.chat=next;this.onChat(next);this.channel?.postMessage('updated');});}
   async close(){this.channel?.close();if(typeof window!=='undefined')window.removeEventListener('storage',this.storageListener);}
 }
@@ -25,6 +25,7 @@ export class LocalStore {
 export class FirebaseStore {
   constructor(config){this.config=config;this.uid=null;this.world=null;this.chat=null;this.mode='online';this.connected=false;this.offset=0;this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.stops=[];this.pendingId=null;}
   now(){return Date.now()+this.offset;}
+  serialize(task){const result=(this.writeQueue||Promise.resolve()).catch(()=>{}).then(task);this.writeQueue=result.catch(()=>{});return result;}
   async setup(){
     if(this.app)return;
     const [appSdk,authSdk,dbSdk]=await Promise.all([import('firebase/app'),import('firebase/auth'),import('firebase/database')]);
@@ -59,28 +60,37 @@ export class FirebaseStore {
     // ruler name separately before a profile is registered or migrated.
     this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
   }
-  async submit(spec){
+  submit(spec){return this.serialize(()=>this.performCommand(spec));}
+  async performCommand(spec){
     if(!this.connected)throw new GameError('연결이 끊겼어요. 다시 연결된 뒤 명령을 보내 주세요.','OFFLINE');
     const id=spec.id||commandId();let at=Math.max(this.now(),this.world.updatedAt);
     this.pendingId=id;
     try{
-      for(let attempt=0;attempt<3;attempt++){
+      for(let attempt=0;attempt<6;attempt++){
         const before=this.world;
         if(before.receipts[id])return {world:before,event:before.history[id]||null};
         at=Math.max(at,before.updatedAt);
-        const command={...spec,id,at,baseRevision:before.revision};const next=applyCommand(before,this.uid,command,at);const patch=changedPaths(before,next);
+        if(spec.type==='recruit'&&before.featureVersion===2&&before.rosterVersion===1&&!hasDueRecruitment(before,at))return {world:before,event:null};
+        const command={...spec,id,at,baseRevision:before.revision};const next=applyCommand(before,this.uid,command,at),events=systemEvents(before,next);const patch=changedPaths(before,next);
         try{
-          await this.sdk.update(this.ref,patch);
+          if(events.length){
+            const nextChat=appendSystemMessages(this.chat,events,this.uid,this.now()),rootPatch={};
+            for(const [path,value] of Object.entries(patch))rootPatch[`worlds/${this.config.worldId||'main'}/${path}`]=value;
+            for(const [path,value] of Object.entries(changedPaths(this.chat,nextChat)))rootPatch[`chat/global/${path}`]=value;
+            await this.sdk.update(this.sdk.ref(this.db),rootPatch);this.chat=nextChat;this.onChat(nextChat);
+          }else await this.sdk.update(this.ref,patch);
           this.pendingId=null;this.world=this.observed?.revision>next.revision?this.observed:next;this.onWorld(this.world);return {world:this.world,event:this.world.history[id]||next.history[id]||null};
         }catch(error){
-          const current=normalizeWorld((await this.sdk.get(this.ref)).val());this.world=current;
+          const [worldSnap,chatSnap]=await Promise.all([this.sdk.get(this.ref),this.sdk.get(this.chatRef)]);const current=normalizeWorld(worldSnap.val());this.world=current;this.chat=chatSnap.val();this.onChat(this.chat);
           if(current.receipts[id]){this.pendingId=null;this.onWorld(current);return {world:current,event:current.history[id]||null};}
-          if(current.revision===before.revision||attempt===2)throw new GameError(firebaseMessage(error),'REMOTE');
+          if((current.revision===before.revision&&!events.length)||attempt===5)throw new GameError(firebaseMessage(error),'REMOTE');
+          await new Promise(resolve=>setTimeout(resolve,20+Math.random()*40*(attempt+1)));
         }
       }
     }finally{this.pendingId=null;if(this.world)this.onWorld(this.world);}
   }
-  async sendChat(text){
+  sendChat(text){return this.serialize(()=>this.performChat(text));}
+  async performChat(text){
     if(!this.connected)throw new GameError('다시 연결된 뒤 채팅을 보내 주세요.','OFFLINE');
     const name=this.world.players[this.uid]?.name||this.profileName;
     const checked=addChatMessage(this.chat,this.uid,name,text,this.now());text=Object.values(checked.messages).find(m=>m.seq===checked.sequence).text;
