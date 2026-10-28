@@ -1,7 +1,7 @@
 import {mkdir,writeFile,access} from 'node:fs/promises';
 import {chromium} from 'file:///C:/Users/codex/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
 import path from 'node:path';
-const output=path.resolve('docs/exports/시즌1_규칙자료_2026-10-28_완성본');
+const output=path.resolve('docs/exports/시즌1_규칙자료_배포판_2026-10-28');
 try{await access(output);throw Error('결과 폴더가 이미 있습니다. 덮어쓰지 않고 새 경로를 지정해 주세요.');}catch(e){if(e.code!=='ENOENT')throw e;}
 await mkdir(output,{recursive:true});
 const styles=`
@@ -9,7 +9,7 @@ const styles=`
 `;
 const table=(head,rows)=>`<table class="rule-table"><thead><tr>${head.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 const card=(title,body)=>`<section class="card"><h3>${title}</h3><p>${body}</p></section>`;
-const shell=(number,title,subtitle,content,compact=false)=>`<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>${styles}</style></head><body><article class="page ${compact?'compact':''}"><div class="top"><div class="brand">三國 · 함께 천하</div><span class="pill">전투 개선 적용 예정 · 미배포</span></div><div class="kicker">${number==='04'?'BEFORE & AFTER':'PLAYER GUIDE'} / ${number}</div><h1>${title}</h1><p class="subtitle">${subtitle}</p>${content}<div class="footer"><span>삼국 · 함께 천하 &nbsp; | &nbsp; 2026.10.28 기준 개발본</span><span>${number} / 04</span></div></article></body></html>`;
+const shell=(number,title,subtitle,content,compact=false)=>`<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>${styles}</style></head><body><article class="page ${compact?'compact':''}"><div class="top"><div class="brand">三國 · 함께 천하</div><span class="pill">시즌 1 적용 · 12시 개막</span></div><div class="kicker">${number==='04'?'BEFORE & AFTER':'PLAYER GUIDE'} / ${number}</div><h1>${title}</h1><p class="subtitle">${subtitle}</p>${content}<div class="footer"><span>삼국 · 함께 천하 &nbsp; | &nbsp; 2026.10.28 시즌 1 기준</span><span>${number} / 04</span></div></article></body></html>`;
 const pages=[
 ['01_규칙설명서_시작과충원.jpg',shell('01','천하의 첫걸음','시즌 1에서 시작하고, 영토를 키우는 방법',`
 <div class="hero"><strong>접속할 때마다 변하는 하나의 전장</strong><p>친구들과 영토를 차지하며 세력을 넓히세요. 게임 전체의 고정 종료 조건은 없습니다.</p></div>
@@ -29,15 +29,15 @@ const pages=[
 <section class="section"><div class="eyebrow">OFFICERS</div><h2>무장과 군주</h2>${table(['구분','규칙'],[['무장 100명','같은 이름은 전장에 한 명만 생존합니다. 전사하면 다시 등장할 수 있고, 해당 등급의 남은 이름이 없으면 D4가 충원됩니다.'],['자동 담당','내정 1명 · 공격/수비 특기 각 최대 2명 · 기동 1명. 높은 등급 → 도시 선착 → 생성 선착 순으로 선정합니다.'],['관평의 호위','관평이 전투 특기로 선정되어 공격에서 패배하면 함께 출전한 다른 장수 중 10초 안에 구조 대상을 선택합니다. 선택하지 않으면 자동 결정됩니다. 관평은 D20을 보호하지 않습니다.'],['군주의 부활','D20이 전사해도 영토가 남으면 계속합니다. 내 도시에서 행동 가능한 D4·D6·D8·D12의 면수 합계 20 이상을 교환해 부활합니다. 해당 영토와 군주는 10분 기다립니다.']])}</section>
 <div class="note section"><b>마지막 영토를 잃으면?</b> 1시간 뒤 다시 시작할 수 있습니다. 랭킹에서는 영토·병력·처치·전사를 확인하고, 전체 채팅은 최근 50개까지 볼 수 있습니다.</div>`,true)],
 ['04_신구대조표_전투와정원.jpg',shell('04','무엇이 달라지나요?','현재 운영 중인 규칙과 구현된 전투 개선 규칙 비교',`
-<div class="note"><b>상태 안내</b> · 왼쪽은 현재 운영 규칙, 오른쪽은 구현을 마친 <span class="em">적용 예정 규칙</span>입니다. 배포 전까지 실제 게임에는 왼쪽 규칙이 적용됩니다.</div>
-<section class="section">${table(['항목','기존 · 현재 운영','개선 · 적용 예정'],[
+<div class="note"><b>상태 안내</b> · 왼쪽은 테스트 시즌 규칙, 오른쪽은 <span class="em">시즌 1 규칙</span>입니다. 시즌 1은 12시부터 새 전장으로 시작합니다.</div>
+<section class="section">${table(['항목','기존 · 테스트 시즌','개선 · 시즌 1'],[
 ['승자 피해 기준','상대 참전 인원으로 계산','특기·보정이 반영된 최종 점수 차로 계산'],
 ['승자 피해량','공격 승리: 적 인원 × 40% 올림<br>수비 승리: 적 인원 × 20% 올림','점수 차 0~2: 3명<br>3~5: 2명 / 6~9: 1명<br>10 이상: 0명'],
 ['패전 장수','기본 전멸. 특정 호위·탈출 특기 예외','점수 차 0~2: 장수별 30%<br>3~5: 장수별 15% 생존 추첨'],
 ['생존 대상','해당 특기의 대상에 따름','일반 추첨은 D6·D8·D12. D4·D20 제외'],
 ['퇴각·기존 특기','특기 생존 시 인접 내 영토로 퇴각','호위·탈출 특기 우선. 일반 생존도 같은 퇴각 조건과 비용 적용'],
 ['도시 기본 정원','일반 12 · 요충지 16 · 대거점 20','일반 12 · 요충지 14 · 대거점 16'],
-['기존 초과 병력','기존 정원 기준 주둔','정원 축소 후 초과분은 내 도시 재배치 또는 복귀 대기로 보존'],
+['시즌 전환','테스트 시즌 결과 지도·랭킹 보관','시즌 1은 영토·병력·전적을 초기화해 새로 시작'],
 ['공격·수비 판정','공격 주사위 합 90% 내림<br>동점은 수비 승리','그대로 유지'],
 ['공통 규칙','10분 충원·영토 행동 대기<br>장수 이동 대기·무장 유일성','그대로 유지']
 ])}</section>
