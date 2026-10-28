@@ -1,4 +1,4 @@
-import {worldWritable} from './seasons.js';
+import {worldWritable,activeWorld} from './seasons.js';
 import {createWorld,normalizeWorld,upgradeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
 export const commandId=()=>crypto.randomUUID();
@@ -48,6 +48,7 @@ export class FirebaseStore {
       else{const provider=new this.authSdk.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});user=(await this.authSdk.signInWithPopup(this.auth,provider)).user;}
     }
     this.uid=user.uid;this.profileName=name||user.displayName||'새 군주';
+    if(this.config.seasons)this.config.worldId=activeWorld(this.now());
     const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatPath=this.config.worldId==='season-1'?'chat/season-1':'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
     let raw=(await this.sdk.get(this.ref)).val();
     if(!raw){const initial=createWorld(this.now(),`samguk:${this.config.worldId||'main'}:${entropy()}`);initial.command.actor=this.uid;const result=await this.sdk.runTransaction(this.ref,current=>current?undefined:initial,{applyLocally:false});raw=result.committed?result.snapshot.val():(await this.sdk.get(this.ref)).val();}

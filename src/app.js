@@ -210,6 +210,7 @@ async function showSeasonHistory(){
   if(!uid||!store?.sdk){panel.innerHTML=heading+'<div class="season-auth"><p>Google 로그인 후 최종 기록을 볼 수 있습니다.</p><button id="season-history-login">Google로 기록 보기</button></div>';$('season-history-login').onclick=async()=>{await googleLogin(false);await showSeasonHistory();};return;}
   seasonHistoryLoading=true;
   try{
+    if(!store.connected)throw Error('연결 후 최종 기록을 다시 불러와 주세요.');
     if(!seasonHistory){const snap=await store.sdk.get(store.sdk.ref(store.db,'worlds/main'));if(!snap.exists())throw Error('테스트 시즌 기록이 없습니다.');seasonHistory=archiveTestSeason(snap.val());}
     seasonHistoryMap?.observer.disconnect();
     panel.innerHTML=heading+`<div class="season-tab-buttons"><button data-season-tab="map">최종 지도</button><button data-season-tab="ranking">최종 랭킹</button></div><div class="season-record-layout"><div class="season-record-map map-card" id="season-record-map"><div class="map-toolbar"><strong>테스트 시즌 최종 결과 지도</strong><div><button data-zoom="out">−</button><button data-zoom="all" data-map-zoom>전체</button><button data-zoom="in">＋</button></div></div><div class="map-viewport"><svg aria-label="테스트 시즌 최종 결과 지도"></svg></div><p id="season-map-caption">영토를 선택하면 최종 소유자와 주둔 인원을 확인합니다.</p></div><aside class="season-record-ranking"><h2>최종 랭킹</h2>${seasonHistory.rankings.map(p=>`<article><strong>${p.rank}위 · <i style="color:${COLORS[p.color]}">●</i> ${esc(p.name)}</strong><small>영토 ${p.territories}곳 · 병력 ${p.army}명<br>처치 ${p.kills} · 전사 ${p.deaths}</small></article>`).join('')||'<p>참가 기록 없음</p>'}</aside></div>`;
