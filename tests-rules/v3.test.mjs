@@ -12,7 +12,7 @@ const cmd=(s,uid,type,fields={},at=Math.max(Date.now(),s.updatedAt))=>applyComma
 const seed=s=>env.withSecurityRulesDisabled(ctx=>sdk.set(sdk.ref(ctx.database(),'worlds/main'),s));
 const read=async()=>((await sdk.get(sdk.ref(db('a'),'worlds/main'))).val());
 const save=(uid,a,b)=>sdk.update(sdk.ref(db(uid),'worlds/main'),changedPaths(a,b));
-function client(uid,s){const store=new FirebaseStore({worldId:'main'});Object.assign(store,{uid,sdk,db:db(uid),world:structuredClone(s),chat:null,connected:true});store.ref=sdk.ref(store.db,'worlds/main');store.chatRef=sdk.ref(store.db,'chat/global');return store;}
+function client(uid,s){const store=new FirebaseStore({worldId:'main'});Object.assign(store,{uid,sdk,db:db(uid),world:structuredClone(s),chat:null,connected:true,worldReady:true,chatReady:true});store.ref=sdk.ref(store.db,'worlds/main');store.chatRef=sdk.ref(store.db,'chat/global');return store;}
 const fx=options=>fixture({...options,at:Date.now()});
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('tests/fixtures/protocol3.rules.json','utf8')}});});
 beforeEach(async()=>env.clearDatabase());

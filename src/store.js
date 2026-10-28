@@ -1,3 +1,4 @@
+import {canWrite} from './field-ui.js';
 import {worldWritable,activeWorld} from './seasons.js';
 import {createWorld,normalizeWorld,upgradeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
@@ -24,7 +25,7 @@ export class LocalStore {
 }
 
 export class FirebaseStore {
-  constructor(config){this.config=config;this.uid=null;this.world=null;this.chat=null;this.mode='online';this.connected=false;this.offset=0;this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.stops=[];this.pendingId=null;}
+  constructor(config){this.config=config;this.uid=null;this.world=null;this.chat=null;this.mode='online';this.connected=false;this.worldReady=false;this.chatReady=false;this.offset=0;this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.stops=[];this.pendingId=null;}
   now(){return Date.now()+this.offset;}
   serialize(task){const result=(this.writeQueue||Promise.resolve()).catch(()=>{}).then(task);this.writeQueue=result.catch(()=>{});return result;}
   async setup(){
@@ -36,7 +37,7 @@ export class FirebaseStore {
       authSdk.connectAuthEmulator(this.auth,'http://127.0.0.1:9099',{disableWarnings:true});dbSdk.connectDatabaseEmulator(this.db,'127.0.0.1',9000);this.mode='emulator';
     }
     this.stops.push(dbSdk.onValue(dbSdk.ref(this.db,'.info/serverTimeOffset'),snap=>{this.offset=Number(snap.val())||0;}));
-    this.stops.push(dbSdk.onValue(dbSdk.ref(this.db,'.info/connected'),snap=>{this.connected=snap.val()===true;this.onConnection(this.connected);}));
+    this.stops.push(dbSdk.onValue(dbSdk.ref(this.db,'.info/connected'),snap=>{this.connected=snap.val()===true;if(!this.connected){this.worldReady=false;this.chatReady=false;}else if(this.ref)this.retryRead().catch(()=>{});this.onConnection(this.connected);}));
     await this.auth.authStateReady();
   }
   async login({restore=false,name='',testUid=''}={}){
@@ -52,9 +53,9 @@ export class FirebaseStore {
     const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatPath=this.config.worldId==='season-1'?'chat/season-1':'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
     let raw=(await this.sdk.get(this.ref)).val();
     if(!raw){const initial=createWorld(this.now(),`samguk:${this.config.worldId||'main'}:${entropy()}`);initial.command.actor=this.uid;const result=await this.sdk.runTransaction(this.ref,current=>current?undefined:initial,{applyLocally:false});raw=result.committed?result.snapshot.val():(await this.sdk.get(this.ref)).val();}
-    this.world=normalizeWorld(raw);
-    this.stops.push(this.sdk.onValue(this.ref,snap=>{if(!snap.exists())return;try{const world=normalizeWorld(snap.val());this.observed=world;if(world.command.id===this.pendingId)return;this.world=world;this.onWorld(world);}catch(error){this.onConnection(false,error.message);}},error=>this.onConnection(false,firebaseMessage(error))));
-    this.stops.push(this.sdk.onValue(this.chatRef,snap=>{this.chat=snap.val();this.onChat(this.chat);},error=>this.onConnection(false,firebaseMessage(error))));
+    this.world=normalizeWorld(raw);this.worldReady=true;
+    this.stops.push(this.sdk.onValue(this.ref,snap=>{if(!snap.exists()){this.worldReady=false;this.onConnection(false,'전황을 다시 확인해야 합니다.');return;}try{const world=normalizeWorld(snap.val());this.worldReady=true;this.observed=world;if(world.command.id===this.pendingId)return;this.world=world;this.onWorld(world);}catch(error){this.worldReady=false;this.onConnection(false,error.message);}},error=>{this.worldReady=false;this.onConnection(false,firebaseMessage(error));}));
+    this.stops.push(this.sdk.onValue(this.chatRef,snap=>{this.chat=snap.val();this.chatReady=true;this.onChat(this.chat);this.onConnection(this.connected);},error=>{this.chatReady=false;this.onConnection(false,firebaseMessage(error));}));
     // .info is maintained locally by the SDK. A server get() is not supported
     // by production RTDB; wait for the local listener already installed in setup.
     this.connected=await new Promise(resolve=>this.sdk.onValue(this.sdk.ref(this.db,'.info/connected'),snap=>resolve(snap.val()===true),{onlyOnce:true}));
@@ -62,10 +63,11 @@ export class FirebaseStore {
     // ruler name separately before a profile is registered or migrated.
     this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
   }
+  async retryRead(){if(this.reading)return this.reading;this.reading=(async()=>{try{const [w,c]=await Promise.all([this.sdk.get(this.ref),this.sdk.get(this.chatRef)]);const world=normalizeWorld(w.val());this.world=world;this.observed=world;this.chat=c.val();this.worldReady=true;this.chatReady=true;this.onWorld(world);this.onChat(this.chat);this.onConnection(this.connected);}catch(error){this.worldReady=false;this.chatReady=false;this.onConnection(false,firebaseMessage(error));throw error;}finally{this.reading=null;}})();return this.reading;}
   submit(spec){return this.serialize(()=>this.performCommand(spec));}
   async performCommand(spec){
     if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('시즌 종료 또는 개막 대기 중입니다. 랭킹과 최종 지도만 볼 수 있습니다.','SEASON_CLOSED');
-    if(!this.connected)throw new GameError('연결이 끊겼어요. 다시 연결된 뒤 명령을 보내 주세요.','OFFLINE');
+    if(!canWrite(this))throw new GameError('전황·채팅을 다시 확인해야 합니다. 다시 연결 버튼을 눌러 주세요.','OFFLINE');
     const id=spec.id||commandId();let at=Math.max(this.now(),this.world.updatedAt);
     this.pendingId=id;
     try{
@@ -95,7 +97,7 @@ export class FirebaseStore {
   sendChat(text){return this.serialize(()=>this.performChat(text));}
   async performChat(text){
     if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('종료된 시즌은 채팅할 수 없습니다.','SEASON_CLOSED');
-    if(!this.connected)throw new GameError('다시 연결된 뒤 채팅을 보내 주세요.','OFFLINE');
+    if(!canWrite(this))throw new GameError('전황과 채팅을 다시 확인한 뒤 보내 주세요.','OFFLINE');
     const name=this.world.players[this.uid]?.name||this.profileName;
     const checked=addChatMessage(this.chat,this.uid,name,text,this.now());text=Object.values(checked.messages).find(m=>m.seq===checked.sequence).text;
     let blocked=null;

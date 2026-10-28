@@ -10,7 +10,7 @@ const db=uid=>env.authenticatedContext(uid,{firebase:{sign_in_provider:'google.c
 const command=(s,uid,type,fields={},at=Math.max(Date.now(),s.updatedAt))=>applyCommand(s,uid,{id:`new-rules-command-${++seq}`,type,at,baseRevision:s.revision,...fields});
 const seed=s=>env.withSecurityRulesDisabled(ctx=>sdk.set(sdk.ref(ctx.database(),'worlds/main'),s));
 const read=async()=>((await sdk.get(sdk.ref(db('a'),'worlds/main'))).val());
-function client(uid,s){const store=new FirebaseStore({worldId:'main'});Object.assign(store,{uid,sdk,db:db(uid),world:structuredClone(s),chat:null,connected:true});store.ref=sdk.ref(store.db,'worlds/main');store.chatRef=sdk.ref(store.db,'chat/global');return store;}
+function client(uid,s){const store=new FirebaseStore({worldId:'main'});Object.assign(store,{uid,sdk,db:db(uid),world:structuredClone(s),chat:null,connected:true,worldReady:true,chatReady:true});store.ref=sdk.ref(store.db,'worlds/main');store.chatRef=sdk.ref(store.db,'chat/global');return store;}
 function fixture(due=true){const now=Date.now(),past=now-11*60_000;let s=createWorld(past);s=command(s,'a','register',{name:'원래 군주'},past);s=command(s,'a','start',{territoryId:'luoyang'},past);s=command(s,'b','register',{name:'정산 군주'},past);s.territories.luoyang.lastRecruitAt=due?past:now;for(let i=0;i<100;i++){s.seed='shared-hero-'+i;if(!due||projectWorld(s,now).territories.luoyang.units.at(-1).sides>4)break;}return s;}
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('tests/fixtures/protocol2.rules.json','utf8')}});});
 beforeEach(async()=>{await env.clearDatabase();});after(async()=>{await env?.cleanup();});

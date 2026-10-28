@@ -1,1 +1,12 @@
-import './generate-rules-v4.mjs';
+import {execFileSync} from 'node:child_process';
+import {readFileSync,writeFileSync} from 'node:fs';
+execFileSync(process.execPath,['tools/generate-rules-v5.mjs'],{stdio:'inherit'});
+const v5=readFileSync('firebase.database.rules.json','utf8');
+const parsed=JSON.parse(v5);
+if(parsed.rules.worlds.$world.featureVersion['.validate']!=='newData.val() == 5')throw Error('Expected protocol 5');
+writeFileSync('tests/fixtures/protocol5.rules.json',v5);
+const {makeSeasonRules}=await import('./generate-season-rules.mjs');
+const output=JSON.stringify(makeSeasonRules())+'\n';
+if(Buffer.byteLength(output)>262144)throw Error('Firebase rules exceed 256 KiB');
+writeFileSync('firebase.database.rules.json',output);
+console.log('시즌 1/v5 운영 규칙 생성 완료. 서버에는 게시하지 않았습니다.');
