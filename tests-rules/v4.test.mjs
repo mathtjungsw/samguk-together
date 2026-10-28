@@ -13,7 +13,7 @@ const read=async()=>((await sdk.get(sdk.ref(db('a'),'worlds/main'))).val());
 const save=(uid,a,b)=>sdk.update(sdk.ref(db(uid),'worlds/main'),changedPaths(a,b));
 const fx=o=>fixture({...o,at:Date.now()});
 const cmd=(s,uid,type,fields={},at=Math.max(Date.now(),s.updatedAt))=>applyCommand(s,uid,{id:`v4-rules-${++serial}`,type,baseRevision:s.revision,at,...fields});
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('firebase.database.rules.json','utf8')}});});
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-samguk-online',database:{host:'127.0.0.1',port:9000,rules:fs.readFileSync('tests/fixtures/protocol4.rules.json','utf8')}});});
 beforeEach(async()=>env.clearDatabase());after(async()=>env?.cleanup());
 test('v4 빈 전장 생성·군주 이름·무작위 시작과 새 이력 저장',async()=>{const s=createWorld(Date.now());s.command.actor='a';await assertSucceeds(sdk.set(sdk.ref(db('a'),'worlds/main'),s));const n=cmd(s,'a','register',{name:'개발 군주'});await assertSucceeds(save('a',s,n));const started=cmd(n,'a','start');await assertSucceeds(save('a',n,started));assert.equal((await read()).featureVersion,4);});
 test('v4 대기 중 D4 교환과 도착 순서를 보존한다',async()=>{const f=fx({attack:[hero('조운'),hero('장비'),soldier('stay')],owner:'a'});f.s.territories[f.to].units=Array.from({length:capacityOf(f.to)},(_,i)=>({...soldier('d'+i),readyAt:Date.now()+18*60_000}));restamp(f.s);await seed(f.s);const n=cmd(f.s,'a','move',{from:f.from,to:f.to,unitIds:['조운','장비'],seed:1});await assertSucceeds(save('a',f.s,n));assert.equal((await read()).territories[f.to].units.length,20);});

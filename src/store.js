@@ -1,3 +1,4 @@
+import {worldWritable} from './seasons.js';
 import {createWorld,normalizeWorld,upgradeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
 export const commandId=()=>crypto.randomUUID();
@@ -47,7 +48,7 @@ export class FirebaseStore {
       else{const provider=new this.authSdk.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});user=(await this.authSdk.signInWithPopup(this.auth,provider)).user;}
     }
     this.uid=user.uid;this.profileName=name||user.displayName||'새 군주';
-    const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatRef=this.sdk.ref(this.db,'chat/global');
+    const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatPath=this.config.worldId==='season-1'?'chat/season-1':'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
     let raw=(await this.sdk.get(this.ref)).val();
     if(!raw){const initial=createWorld(this.now(),`samguk:${this.config.worldId||'main'}:${entropy()}`);initial.command.actor=this.uid;const result=await this.sdk.runTransaction(this.ref,current=>current?undefined:initial,{applyLocally:false});raw=result.committed?result.snapshot.val():(await this.sdk.get(this.ref)).val();}
     this.world=normalizeWorld(raw);
@@ -62,6 +63,7 @@ export class FirebaseStore {
   }
   submit(spec){return this.serialize(()=>this.performCommand(spec));}
   async performCommand(spec){
+    if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('시즌 종료 또는 개막 대기 중입니다. 랭킹과 최종 지도만 볼 수 있습니다.','SEASON_CLOSED');
     if(!this.connected)throw new GameError('연결이 끊겼어요. 다시 연결된 뒤 명령을 보내 주세요.','OFFLINE');
     const id=spec.id||commandId();let at=Math.max(this.now(),this.world.updatedAt);
     this.pendingId=id;
@@ -76,7 +78,7 @@ export class FirebaseStore {
           if(events.length){
             const nextChat=appendSystemMessages(this.chat,events,this.uid,this.now()),rootPatch={};
             for(const [path,value] of Object.entries(patch))rootPatch[`worlds/${this.config.worldId||'main'}/${path}`]=value;
-            for(const [path,value] of Object.entries(changedPaths(this.chat,nextChat)))rootPatch[`chat/global/${path}`]=value;
+            for(const [path,value] of Object.entries(changedPaths(this.chat,nextChat)))rootPatch[`${this.chatPath||'chat/global'}/${path}`]=value;
             await this.sdk.update(this.sdk.ref(this.db),rootPatch);this.chat=nextChat;this.onChat(nextChat);
           }else await this.sdk.update(this.ref,patch);
           this.pendingId=null;this.world=this.observed?.revision>next.revision?this.observed:next;this.onWorld(this.world);return {world:this.world,event:this.world.history[id]||next.history[id]||null};
@@ -91,6 +93,7 @@ export class FirebaseStore {
   }
   sendChat(text){return this.serialize(()=>this.performChat(text));}
   async performChat(text){
+    if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('종료된 시즌은 채팅할 수 없습니다.','SEASON_CLOSED');
     if(!this.connected)throw new GameError('다시 연결된 뒤 채팅을 보내 주세요.','OFFLINE');
     const name=this.world.players[this.uid]?.name||this.profileName;
     const checked=addChatMessage(this.chat,this.uid,name,text,this.now());text=Object.values(checked.messages).find(m=>m.seq===checked.sequence).text;
