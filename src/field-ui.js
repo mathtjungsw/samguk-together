@@ -9,6 +9,12 @@ export function probabilityText(p,approximate=false){
   if(!approximate&&(p===0||p===1))return `${p*100}%`;
   return prefix+(p<.01?'1% 미만':p>=.99?'99% 이상':p>=.9895?'99%에 가까움':(p*100).toFixed(1)+'%');
 }
+export function battleRecord(raw){
+  const r=structuredClone(raw),list=v=>Array.isArray(v)?v:Object.values(v||{});
+  for(const key of ['attack','defend','attackDead','defendDead','stationed','returned','defendSurvivors','escaped','retreatCosts','survivalAttempts'])r[key]=list(r[key]);
+  if(r.effects)for(const side of ['attack','defense']){r.effects[side]??={};for(const key of ['logs','dice','chosen','used'])r.effects[side][key]=list(r.effects[side][key]);}
+  return r;
+}
 export const eventRelated=(e,uid)=>!!uid&&(e.type==='update'||e.type==='battle'?(e.type==='update'||e.result?.attacker===uid||e.result?.defender===uid):e.actor===uid||e.previousOwner===uid);
 export function eventText(e){if(e.type!=='battle'||!e.result)return e.text||'';const r=e.result;return `${placeInfo(e.to)?.ko||'도시'} · ${r.won?'공격군 점령':r.score===r.defense?'동점 · 수비군 승리':'공격 실패 · 수비군 승리'} · ${r.score}:${r.defense} · ${r.won?'공격군':'수비군'} ${r.policy?.grade||'승리'} · 공격군 −${r.attackDead?.length||0} / 수비군 −${r.defendDead?.length||0}`;}
 export function historyRows(s,uid,{scope='mine',kind='all'}={}){return visibleHistory(s).filter(e=>(scope!=='mine'||eventRelated(e,uid))&&(kind==='all'||kind==='battle'&&e.type==='battle'||kind==='heroes'&&['hero','revive'].includes(e.type)||kind==='other'&&!['battle','hero','revive'].includes(e.type)));}
