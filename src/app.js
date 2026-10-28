@@ -76,7 +76,7 @@ function renderSide(){if(uid&&(world.featureVersion<4||world.maintenance)){$('co
 function renderFooter(){
   $('command-footer').hidden=sideTab!=='command';if(sideTab!=='command')return;
   if(!uid){$('command-footer').innerHTML='<p class="note">구글 계정으로 같은 전장에 참여하거나 지도를 살펴보세요.</p>';return;}
-  if(world.featureVersion!==5||world.maintenance){$('command-footer').innerHTML='<p class="note">업데이트 전환 중 · 잠시 후 새로고침</p>';return;}
+  if(world.featureVersion<4||world.maintenance){$('command-footer').innerHTML='<p class="note">업데이트 전환 중 · 잠시 후 새로고침</p>';return;}
   if(needsRulerName()){$('command-footer').innerHTML='<p class="note">먼저 군주 이름을 정해 주세요.</p>';return;}
   const mine=ownedTerritories(view,uid),p=view.players[uid],now=currentTime(),a=view.territories[source],b=view.territories[target],disabled=busy||!store?.connected;
   if(!mine.length){const wait=restartAvailableAt(p)>now;$('command-footer').innerHTML=`<p class="action-details">군주 D20 1명과 D4 4명으로 무작위 영토에서 시작합니다.<br>중립이 없으면 영토 수 1위의 영토 한 곳을 승인 없이 배정합니다.${wait?'<br>재시작까지 '+clockText(restartAvailableAt(p)-now):''}</p><button class="primary-button" id="start-button" ${wait||disabled?'disabled':''}>${wait?'재시작 대기 중':'무작위 영토에서 시작'}</button>`;return;}
@@ -113,11 +113,11 @@ function observeNews(s){
 }
 function queueSettlement(){
   if(store?.mode!=='practice'&&(!worldWritable(store?.config?.worldId||activeWorld(currentTime()),currentTime())||world.featureVersion===4&&!hasDueRecruitment(world,currentTime())))return;
-  if(world.featureVersion!==5||world.maintenance||settling||busy||!uid||!store?.connected||!world.players[uid]||needsRulerName()||document.hidden||Date.now()<nextSettlementTry)return;
-  if(world.release?.id===RELEASE.id&&world.featureVersion===5&&world.rosterVersion===2&&!hasDueRecruitment(world,currentTime()))return;
+  if(world.featureVersion<4||world.maintenance||settling||busy||!uid||!store?.connected||!world.players[uid]||needsRulerName()||document.hidden||Date.now()<nextSettlementTry)return;
+  if(world.release?.id===RELEASE.id&&world.featureVersion>=4&&world.rosterVersion===2&&!hasDueRecruitment(world,currentTime()))return;
   settling=true;setTimeout(async()=>{try{
     if(!store||!store.connected||busy)return;
-    if(world.release?.id===RELEASE.id&&world.featureVersion===5&&world.rosterVersion===2&&!hasDueRecruitment(world,currentTime()))return;
+    if(world.release?.id===RELEASE.id&&world.featureVersion>=4&&world.rosterVersion===2&&!hasDueRecruitment(world,currentTime()))return;
     await store.submit(world.featureVersion===4||world.release?.id===RELEASE.id?{type:'recruit'}:{type:'announce',id:RELEASE.id});
   }catch(error){nextSettlementTry=Date.now()+30_000;toast(firebaseMessage(error));}finally{settling=false;}},150+Math.random()*700);
 }
