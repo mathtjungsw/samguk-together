@@ -6,7 +6,7 @@ import * as Legacy from './legacy-engine.js';
 import {MAP,MINUTE,RULES,TIERS,COLORS,placeInfo,adjacent,ownedTerritories,queuedUnits,livingUnits,isOfficer,hash32,seededRandom,GameError,requireGame,byId} from './game-core.js';
 import {EFFECTS,heroByName,heroById,effectOf,effectNumber,newEffectState,stateOf,reusable,markProc,governor,preparedSince,economy,regularRecruitBonus,battleOfficers,evaluateBattle,moveTiming} from './hero-effects.js';
 export {MAP,MINUTE,RULES,RANKS,TIERS,COLORS,placeInfo,adjacent,baseCapacity,ownedTerritories,queuedUnits,livingUnits,hash32,seededRandom,GameError};
-export const RELEASE=Object.freeze({id:'update-20261028-combat-v5',text:'📣 업데이트: 점수 차로 승자 피해 0~3명, 접전 패배 장수 30%·15% 생존 추첨을 적용했습니다. 퇴각지 필요·기존 호위 우선. 도시 정원은 12·14·16명이며 초과 병력은 재배치·복귀 대기로 보존했습니다. 공격 90%·동점 수비 승리 유지. 새로고침해 주세요.'});
+export const RELEASE=Object.freeze({id:'update-20261028-combat-v5',text:'📣 업데이트: 점수 차로 승자 피해 0~3명, 접전 패배 장수 30%·15% 생존 추첨을 적용했습니다. 퇴각지 필요·기존 호위 우선. 시즌 1의 도시 정원은 12·14·16명입니다. 공격 90%·동점 수비 승리 유지. 새로고침해 주세요.'});
 export const cleanName=Legacy.cleanName,clockText=Legacy.clockText,armyPower=Legacy.armyPower,attackScore=Legacy.attackScore,casualtyCount=Legacy.casualtyCount,winProbability=Legacy.winProbability;
 export const addChatMessage=Legacy.addChatMessage,chatMessages=Legacy.chatMessages,appendSystemMessages=Legacy.appendSystemMessages;
 export const readyUnits=(t,now)=>t.units.filter(u=>u.readyAt<=now);

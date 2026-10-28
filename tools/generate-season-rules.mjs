@@ -1,17 +1,27 @@
 import fs from 'node:fs';
 import {TEST_END,SEASON1_START} from '../src/seasons.js';
-export function makeSeasonRules(testEnd=TEST_END,seasonStart=SEASON1_START,now=Date.now()){
-const old=JSON.parse(fs.readFileSync('tests/fixtures/protocol4.rules.json','utf8'));
-const next=JSON.parse(fs.readFileSync('tests/fixtures/protocol5.rules.json','utf8'));
-function forWorld(value,id){if(Array.isArray(value))return value.map(v=>forWorld(v,id));if(typeof value==='string')return value.replaceAll("$world=='main'",'true').replaceAll("$world == 'main'",'true').replaceAll('$world',`'${id}'`);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,forWorld(v,id)]));return value;}
-const main=forWorld(old.rules.worlds.$world,'main'),season=forWorld(next.rules.worlds.$world,'season-1');
-main['.write']=`(${main['.write']}) && now < ${testEnd} && newData.child('command').child('at').val() < ${testEnd}`;
-season['.write']=`(${season['.write']}) && now >= ${seasonStart} && newData.child('command').child('at').val() >= ${seasonStart}`;
-const global=structuredClone(old.rules.chat.global),newChat=JSON.parse(JSON.stringify(next.rules.chat.global).replaceAll(".child('main')",".child('season-1')"));
-global['.write']=`(${global['.write']}) && now < ${testEnd}`;
-newChat['.write']=`(${newChat['.write']}) && now >= ${seasonStart}`;
-const root={rules:{...next.rules,worlds:{main,'season-1':season,'$other':{'.write':false}},chat:{global,'season-1':newChat,'$other':{'.write':false}}}};
-if(now>=testEnd){root.rules.worlds.main={'.read':main['.read'],'.write':false};root.rules.chat.global={'.read':global['.read'],'.write':false};}
-return root;
+import {MAP} from '../src/game-core.js';
+export function makeSeasonRules(end=TEST_END,start=SEASON1_START){
+ const root=JSON.parse(fs.readFileSync('tests/fixtures/protocol4.rules.json','utf8'));
+ const next=JSON.parse(fs.readFileSync('tests/fixtures/protocol5.rules.json','utf8'));
+ const w=root.rules.worlds.$world,v5=next.rules.worlds.$world;
+ const gate=`(($world=='main'&&now<${end}&&newData.child('command').child('at').val()<${end})||($world=='season-1'&&now>=${start}&&newData.child('command').child('at').val()>=${start}))`;
+ const version="($world=='main'?4:5)";
+ w['.write']=w['.write'].replace("$world=='main'",gate).replace(/(\.child\('(featureVersion|protocol)'\)\.val\(\)\s*==\s*)4\b/g,`$1${version}`).replaceAll("'update-20261028-auto-roles-10s'","($world=='main'?'update-20261028-auto-roles-10s':'update-20261028-combat-v5')");
+ w.featureVersion['.validate']=`newData.val()==${version}`;w.command.protocol['.validate']=`newData.val()==${version}`;
+ for(const p of MAP.places){const old={normal:15,stronghold:19,citadel:23}[p.rank],updated={normal:15,stronghold:17,citadel:19}[p.rank];if(old===updated)continue;const before=`($tid=='${p.id}'&&!newData.child('units').hasChild('${old}')`;const after=`($tid=='${p.id}'&&!newData.child('units').hasChild($world=='main'?'${old}':'${updated}')`;if(!w.territories.$tid['.validate'].includes(before))throw Error(`Missing capacity ${p.id}`);w.territories.$tid['.validate']=w.territories.$tid['.validate'].replace(before,after);}
+ // Group the identical per-city limits so both season protocols fit in the rules editor.
+ const capacityClauses=MAP.places.map(p=>`($tid=='${p.id}'&&!newData.child('units').hasChild(${p.rank==='normal'?"'15'":p.rank==='stronghold'?"$world=='main'?'19':'17'":"$world=='main'?'23':'19'"}))`).join('||');
+ const grouped=['normal','stronghold','citadel'].map(rank=>{const ids=MAP.places.filter(p=>p.rank===rank).map(p=>p.id).join('|'),limit=rank==='normal'?"'15'":rank==='stronghold'?"$world=='main'?'19':'17'":"$world=='main'?'23':'19'";return `($tid.matches(/^(${ids})$/)&&!newData.child('units').hasChild(${limit}))`;}).join('||');
+ if(!w.territories.$tid['.validate'].includes(capacityClauses))throw Error('Capacity clauses changed');
+ w.territories.$tid['.validate']=w.territories.$tid['.validate'].replace(capacityClauses,grouped);
+ const historic=w.history.$event['.validate'], extra=v5.history.$event['.validate'].slice(historic.length);
+ w.history.$event['.validate']=`(${historic})&&($world=='main'||true${extra})`;
+ w.release['.validate']=w.release['.validate'].replace("'update-20261028-auto-roles-10s'","($world=='main'?'update-20261028-auto-roles-10s':'update-20261028-combat-v5')");
+ w.capacityMigration={'.validate':"$world=='season-1' && ("+v5.capacityMigration['.validate']+")"};
+ w.returnQueues.$uid.capacityOrigins={'$unit':{'.validate':"$world=='season-1' && ("+v5.returnQueues.$uid.capacityOrigins.$unit['.validate']+")"}};
+ const old=root.rules.chat.global,chat=JSON.parse(JSON.stringify(old).replaceAll(".child('main')",".child('season-1')"));
+ old['.write']=`(${old['.write']})&&now<${end}`;chat['.write']=`(${chat['.write']})&&now>=${start}`;root.rules.chat['season-1']=chat;
+ return root;
 }
-if(process.argv[1]?.endsWith('generate-season-rules.mjs')){fs.writeFileSync('firebase.database.rules.json',JSON.stringify(makeSeasonRules())+'\n');console.log('Season rules: test closes 2026-10-28 11:00 KST; season 1 opens 12:00 KST.');}
+if(process.argv[1]?.endsWith('generate-season-rules.mjs')){fs.writeFileSync('firebase.database.rules.json',JSON.stringify(makeSeasonRules())+'\n');console.log('Season rules generated for v4 test season and v5 season 1.');}
