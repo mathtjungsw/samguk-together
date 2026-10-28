@@ -29,3 +29,17 @@ test('시즌1 점수차 전투 저장·잘못된 점수차 거부 및 채팅과 
  await assertSucceeds(store.submit({type:'announce',id:V5.RELEASE.id}));
  assert.equal((await get(store.ref)).val().release.id,V5.RELEASE.id);assert.ok((await get(store.chatRef)).exists());
 });
+
+test('시즌1 D6 전령 저장과 D4·D20 모집 위조 거부, 최신 공지 이후 구버전 재공지 거부',async()=>{
+ const sdk=await import('firebase/database'),now=Date.now();await load(now-60000,now-1000);const f=fixture({at:now});
+ await env.withSecurityRulesDisabled(ctx=>set(ref(ctx.database(),'worlds/season-1'),f.s));
+ const n=V5.applyCommand(f.s,'a',{id:'d6-news-policy',type:'recruit',at:Date.now(),baseRevision:f.s.revision});
+ n.history['new-d6']={id:'new-d6',type:'hero',at:n.updatedAt,actor:'a',to:f.from,unit:{id:'new-d6',name:'왕평',sides:6},text:'군주의 도시에 부장 왕평(D6)이 합류했습니다.'};
+ for(const sides of [4,20]){const bad=structuredClone(n);bad.history['new-d6'].unit.sides=sides;await assertFails(update(ref(db(),'worlds/season-1'),changedPaths(f.s,bad)));}
+ await assertSucceeds(update(ref(db(),'worlds/season-1'),changedPaths(f.s,n)));
+ const store=new FirebaseStore({worldId:'season-1'});Object.assign(store,{uid:'a',sdk,db:db(),world:n,chat:null,connected:true,chatPath:'chat/season-1'});store.ref=ref(store.db,'worlds/season-1');store.chatRef=ref(store.db,'chat/season-1');
+ // Store an additional D6 system event atomically with a normal command.
+ const {appendSystemMessages}=await import('../src/engine.js');const next=V5.applyCommand(n,'a',{id:'d6-chat-news',type:'recruit',at:Date.now(),baseRevision:n.revision});next.history['chat-d6']={...n.history['new-d6'],id:'chat-d6',at:next.updatedAt};const chat=appendSystemMessages(null,[next.history['chat-d6']],'a',next.updatedAt),patch={};for(const [k,v]of Object.entries(changedPaths(n,next)))patch['worlds/season-1/'+k]=v;patch['chat/season-1']=chat;await assertSucceeds(update(ref(db()),patch));
+ store.world=next;store.chat=chat;await assertSucceeds(store.submit({type:'announce',id:V5.RELEASE.id}));
+ const current=(await get(store.ref)).val(),old=V5.applyCommand(V5.normalizeWorld(current),'a',{id:'stale-release-recruit',type:'recruit',at:Date.now(),baseRevision:current.revision});old.command.type='announce';old.command.id='update-20261028-combat-v5';old.receipts[old.command.id]={actor:'a',at:old.updatedAt};old.release={id:old.command.id,text:'과거 공지',at:old.updatedAt};await assertFails(update(store.ref,changedPaths(current,old)));
+});

@@ -1,3 +1,4 @@
+import {RELEASE_ID,RELEASE_TEXT,heroNewsAllowed} from './release-policy.js';
 import * as V4 from './engine-v4.js';
 import {RANKS,baseCapacity,combatPolicy,winnerLoss,survivalDraws} from './combat-policy.js';
 import * as V3 from './engine-v3.js';
@@ -6,7 +7,7 @@ import * as Legacy from './legacy-engine.js';
 import {MAP,MINUTE,RULES,TIERS,COLORS,placeInfo,adjacent,ownedTerritories,queuedUnits,livingUnits,isOfficer,hash32,seededRandom,GameError,requireGame,byId} from './game-core.js';
 import {EFFECTS,heroByName,heroById,effectOf,effectNumber,newEffectState,stateOf,reusable,markProc,governor,preparedSince,economy,regularRecruitBonus,battleOfficers,evaluateBattle,moveTiming} from './hero-effects.js';
 export {MAP,MINUTE,RULES,RANKS,TIERS,COLORS,placeInfo,adjacent,baseCapacity,ownedTerritories,queuedUnits,livingUnits,hash32,seededRandom,GameError};
-export const RELEASE=Object.freeze({id:'update-20261028-combat-v5',text:'📣 업데이트: 점수 차로 승자 피해 0~3명, 접전 패배 장수 30%·15% 생존 추첨을 적용했습니다. 퇴각지 필요·기존 호위 우선. 시즌 1의 도시 정원은 12·14·16명입니다. 공격 90%·동점 수비 승리 유지. 지난 역사 기록 화면 오류도 수정했습니다. 새로고침해 주세요.'});
+export const RELEASE=Object.freeze({id:RELEASE_ID,text:RELEASE_TEXT});
 export const cleanName=Legacy.cleanName,clockText=Legacy.clockText,armyPower=Legacy.armyPower,attackScore=Legacy.attackScore,casualtyCount=Legacy.casualtyCount,winProbability=Legacy.winProbability;
 export const addChatMessage=Legacy.addChatMessage,chatMessages=Legacy.chatMessages,appendSystemMessages=Legacy.appendSystemMessages;
 export const readyUnits=(t,now)=>t.units.filter(u=>u.readyAt<=now);
@@ -153,7 +154,7 @@ export function settleRecruitment(s,now){
     else if(type==='gift'){if(t.units.length<capacityOf(t.id,s,at)){t.units.push(bonusSoldier(t,at,'mizhu'));u.effectState.firstGift=true;}}
     else if(t.units.length<capacityOf(t.id,s,at)){
       const unit=spawnRecruit(s,t,at);t.units.push(unit);refreshIndexes(s);const giver=regularRecruitBonus(s,t,at);if(giver&&t.units.length<capacityOf(t.id,s,at))t.units.push(bonusSoldier(t,at,giver.id));
-      if(unit.sides>=8)news.push({id:unit.id,type:'hero',at,actor:t.owner,to:t.id,unit:structuredClone(unit),text:`${s.players[t.owner].name} 군주의 ${placeInfo(t.id).ko}에 ${TIERS[unit.sides]} ${unit.name}(D${unit.sides})이 합류했습니다.`});
+      if(heroNewsAllowed(unit,at))news.push({id:unit.id,type:'hero',at,actor:t.owner,to:t.id,unit:structuredClone(unit),text:`${s.players[t.owner].name} 군주의 ${placeInfo(t.id).ko}에 ${TIERS[unit.sides]} ${unit.name}(D${unit.sides})이 합류했습니다.`});
       t.lastRecruitAt=at;t.cycleMs=economy(s,t,at).interval;t.nextRecruitAt=at+t.cycleMs;
     }else t.nextRecruitAt=0;
     if(t.units.length>=capacityOf(t.id,s,at)){t.nextRecruitAt=0;t.lastRecruitAt=at;}
@@ -253,6 +254,6 @@ export function applyCommand(raw,actor,command,now=command.at){
   c.resolved={};c.resolutionByTerritory={};c.resolutionByPlayer={};for(const p of Object.values(pendingBefore))if(!s.pendingBattles[p.id]){c.resolved[p.id]=true;for(const id of Object.keys(p.locks))c.resolutionByTerritory[id]=p.id;c.resolutionByPlayer[p.actor]=p.id;const defender=raw.territories[p.to].owner;if(defender)c.resolutionByPlayer[defender]=p.id;}for(const e of news)s.history[e.id]=e;s.history=trim(s.history,100);s.revision++;s.updatedAt=now;s.command={id:c.id,type:c.type,actor,at:now,baseRevision:command.baseRevision,from:c.from||'',to:c.to||c.territoryId||'',battleId:c.battleId||'',resolved:c.resolved||{},resolutionByTerritory:c.resolutionByTerritory||{},resolutionByPlayer:c.resolutionByPlayer||{},guardChoice:c.guardChoice||'',officerMove:c.type==='move'&&raw.territories[c.to]?.owner===actor&&Array.isArray(c.unitIds)&&c.unitIds.length>0&&c.unitIds.every(id=>raw.territories[c.from]?.units.some(u=>u.id===id&&u.sides>4)),seed:c.seed??0,protocol:5,origins:commandOrigins(raw,s)};s.receipts[c.id]={at:now,actor};s.receipts=trim(s.receipts,100);return normalizeWorld(s);
 }
 export function leaderboard(s,sort='territories'){if(s.featureVersion!==5)return V4.leaderboard(s,sort);const keys={territories:['territories','army','kills'],army:['army','territories','kills'],kills:['kills','territories','army'],deaths:['deaths','territories','army']}[sort]||['territories','army','kills'];const rows=Object.values(s.players).map(p=>({...p,territories:ownedTerritories(s,p.uid).length,army:livingUnits(s,p.uid).length,queued:queuedUnits(s,p.uid).length,kills:p.kills||0,deaths:p.deaths||0}));rows.sort((a,b)=>keys.reduce((n,key)=>n||b[key]-a[key],0)||a.joinedAt-b.joinedAt||a.uid.localeCompare(b.uid));let rank=0;return rows.map((r,i)=>{if(!i||keys.some(k=>r[k]!==rows[i-1][k]))rank=i+1;return {...r,rank};});}
-export const visibleHistory=s=>Object.values(s.history||{}).filter(e=>!(e.type==='hero'&&e.unit?.sides===6)&&!(e.type==='move'&&!e.heroes?.length)).sort((a,b)=>b.at-a.at||b.id.localeCompare(a.id));
-export const systemEvents=(before,after)=>after.featureVersion!==5?V4.systemEvents(before,after):Object.values(after.history).filter(e=>['hero','revive','update'].includes(e.type)&&!(e.type==='hero'&&e.unit?.sides===6)&&!before.history?.[e.id]).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));
+export const visibleHistory=s=>Object.values(s.history||{}).filter(e=>!(e.type==='move'&&!e.heroes?.length)).sort((a,b)=>b.at-a.at||b.id.localeCompare(a.id));
+export const systemEvents=(before,after)=>after.featureVersion!==5?V4.systemEvents(before,after):Object.values(after.history).filter(e=>['hero','revive','update'].includes(e.type)&&!before.history?.[e.id]).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));
 export function estimateBattle(s,from,to,units,ids,at,samples=8192){const t=s.territories[to],active=battleOfficers(s.territories[from],units,ids,at,true,s),defense=battleOfficers(t,t.units,undefined,at,false,s);if(!active.length&&!defense.length)return {chance:winProbability(units,t.units),approximate:false};let wins=0;const key=hash32(`estimate:${s.revision}:${from}:${to}:${units.map(u=>u.id).join(',')}:${ids.join(',')}:${Math.floor(at/MINUTE)}`);for(let i=0;i<samples;i++){const r=evaluateBattle({s,from,to,attackUnits:units,defendUnits:t.units,attackIds:ids,at,seed:key+i});if(r.attack.score>r.defense.score)wins++;}return {chance:wins/samples,approximate:true};}
