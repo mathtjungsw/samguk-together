@@ -195,7 +195,7 @@ function syncSeasonUI(){
   document.body.classList.toggle('is-season-break',phase==='break');
   if(phase==='break'){
     if($('modal').open){$('modal').close();modalKind='';}
-    forcedArchive=true;if($('season-history').hidden&&!seasonHistoryLoading)showSeasonHistory();
+    forcedArchive=true;const panel=$('season-history');if(!seasonHistoryLoading&&(panel.hidden||(uid&&store?.connected&&panel.querySelector('#season-history-login'))))showSeasonHistory();
   }else if(phase==='season1'){
     if(forcedArchive){$('season-history').hidden=true;forcedArchive=false;}
     if(store?.mode==='online'&&store.config.worldId!=='season-1'&&!seasonSwitching&&!busy){seasonSwitching=true;googleLogin(true).finally(()=>{seasonSwitching=false;});}
@@ -203,6 +203,7 @@ function syncSeasonUI(){
 }
 async function showSeasonHistory(){
   if(seasonPhase(currentTime())==='test'){toast('최종 기록은 오늘 11:00 시즌 종료 후 열립니다.');return;}
+  if(seasonHistoryLoading)return;
   const panel=$('season-history');panel.hidden=false;panel.dataset.tab='map';
   const heading=`<header><div><h1>삼국지 지난 역사</h1><p>테스트 시즌 · 2026년 10월 28일 11:00 종료<br>시즌 1 · 오늘 12:00 개막 · 최종 랭킹과 결과 지도만 보존합니다.</p></div>${seasonPhase(currentTime())==='season1'?'<button id="leave-history">시즌 1로 돌아가기</button>':''}</header>`;
   panel.innerHTML=heading+'<p>최종 기록을 불러오고 있습니다.</p>';
