@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
 import {get,ref,set,update} from 'firebase/database';
 import {makeSeasonRules} from '../tools/generate-season-rules.mjs';
-import * as V4 from '../src/engine.js';
+import * as V4 from '../src/engine-v4.js';
 import * as V5 from '../src/engine.js';
 import {changedPaths} from '../src/store.js';
 let env;

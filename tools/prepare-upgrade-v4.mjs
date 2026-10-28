@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import {upgradeWorld,normalizeWorld,refreshIndexes} from '../src/engine.js';
+import {upgradeWorld,normalizeWorld,refreshIndexes} from '../src/engine-v4.js';
 import * as V3 from '../src/engine-v3.js';
 const [input,output]=process.argv.slice(2);
 if(!input||!output)throw Error('Usage: node tools/prepare-upgrade-v4.mjs <private-root-backup.json> <private-world.json>');

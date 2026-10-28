@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {MAP,RELEASE} from '../src/engine.js';
+import {MAP,RELEASE} from '../src/engine-v4.js';
 import {EFFECTS} from '../src/hero-effects.js';
 const rules=JSON.parse(fs.readFileSync('tests/fixtures/protocol3.rules.json','utf8')).rules,w=rules.worlds.$world;
 const O="root.child('worlds').child($world)",N=d=>'newData'+'.parent()'.repeat(d),C=d=>`${N(d)}.child('command')`,typ=(d,t)=>`${C(d)}.child('type').val() == '${t}'`,num=(extra='')=>({'.validate':`newData.isNumber() && newData.val() >= 0 && newData.val() <= now + 1205000${extra}`}),str=max=>({'.validate':`newData.isString() && newData.val().length <= ${max||256}`});

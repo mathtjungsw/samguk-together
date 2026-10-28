@@ -1,3 +1,4 @@
+import {baseCapacity as v5Capacity} from './combat-policy.js';
 import {battleCondition} from './effect-preview.js';
 import {chooseOfficers} from './role-policy.js';
 import EFFECTS from './data/hero-effects.json' with {type:'json'};
@@ -14,7 +15,7 @@ export function markProc(u,at){const st=stateOf(u);st.hasProc=true;st.lastProcAt
 export function governor(s,t,at){const u=t.units.find(u=>u.id===t.roles?.governor);return u&&u.readyAt<=at&&effectOf(u)?.economic?u:null;}
 export const preparedSince=(t,u,defense=false)=>Math.max(u.readyAt,t.roles?.[defense?'defenseSince':'governorSince']||0);
 export function economy(s,t,at){
-  let interval=RULES.recruitMs,capacity=baseCapacity(t.id),d6=0,d8=0;
+  let interval=RULES.recruitMs,capacity=s.featureVersion>=5?v5Capacity(t.id):baseCapacity(t.id),d6=0,d8=0;
   const u=governor(s,t,at),n=effectNumber(u),since=u?preparedSince(t,u):at;
   if(n===2)interval=8*MINUTE;
   if(n===48&&placeInfo(t.id).rank!=='normal')interval=9*MINUTE;

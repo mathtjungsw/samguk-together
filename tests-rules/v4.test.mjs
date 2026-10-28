@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
 import * as sdk from 'firebase/database';
-import {createWorld,applyCommand,normalizeWorld,refreshIndexes,capacityOf,reconcileRoles,myPendingBattle,GUARD_CHOICE_MS,RELEASE,adjacent,MAP} from '../src/engine.js';
+import {createWorld,applyCommand,normalizeWorld,refreshIndexes,capacityOf,reconcileRoles,myPendingBattle,GUARD_CHOICE_MS,RELEASE,adjacent,MAP} from '../src/engine-v4.js';
 import {FirebaseStore,changedPaths} from '../src/store.js';
 import {fixture,hero,soldier,restamp} from '../tests/v4-helpers.mjs';
 let env,serial=0;

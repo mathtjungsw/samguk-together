@@ -1,10 +1,12 @@
+import * as V4 from './engine-v4.js';
+import {RANKS,baseCapacity,combatPolicy,winnerLoss,survivalDraws} from './combat-policy.js';
 import * as V3 from './engine-v3.js';
 import {chooseOfficers,officerOrder,resolveRoles,stampUnit,inheritedCreatedAt} from './role-policy.js';
 import * as Legacy from './legacy-engine.js';
-import {MAP,MINUTE,RULES,RANKS,TIERS,COLORS,placeInfo,adjacent,baseCapacity,ownedTerritories,queuedUnits,livingUnits,isOfficer,hash32,seededRandom,GameError,requireGame,byId} from './game-core.js';
+import {MAP,MINUTE,RULES,TIERS,COLORS,placeInfo,adjacent,ownedTerritories,queuedUnits,livingUnits,isOfficer,hash32,seededRandom,GameError,requireGame,byId} from './game-core.js';
 import {EFFECTS,heroByName,heroById,effectOf,effectNumber,newEffectState,stateOf,reusable,markProc,governor,preparedSince,economy,regularRecruitBonus,battleOfficers,evaluateBattle,moveTiming} from './hero-effects.js';
 export {MAP,MINUTE,RULES,RANKS,TIERS,COLORS,placeInfo,adjacent,baseCapacity,ownedTerritories,queuedUnits,livingUnits,hash32,seededRandom,GameError};
-export const RELEASE=Object.freeze({id:'update-20261028-auto-roles-10s',text:'📣 업데이트: 담당 장수 자동 배정·인접 지원·전투 특기 설명·목적지별 최대 인원을 적용했습니다. 장수만 이동은 영토 대기와 별개로 개인 10분 대기합니다. 대기 중 D4도 일반 교환 가능. 인접 퇴각의 D4 구조 비용은 전사 통계 제외. 관평은 공격 패전 후 10초간 구조 대상을 선택합니다. 기존 병력·기록 보존. 새로고침해 주세요.'});
+export const RELEASE=Object.freeze({id:'update-20261028-combat-v5',text:'📣 업데이트: 점수 차로 승자 피해 0~3명, 접전 패배 장수 30%·15% 생존 추첨을 적용했습니다. 퇴각지 필요·기존 호위 우선. 도시 정원은 12·14·16명이며 초과 병력은 재배치·복귀 대기로 보존했습니다. 공격 90%·동점 수비 승리 유지. 새로고침해 주세요.'});
 export const cleanName=Legacy.cleanName,clockText=Legacy.clockText,armyPower=Legacy.armyPower,attackScore=Legacy.attackScore,casualtyCount=Legacy.casualtyCount,winProbability=Legacy.winProbability;
 export const addChatMessage=Legacy.addChatMessage,chatMessages=Legacy.chatMessages,appendSystemMessages=Legacy.appendSystemMessages;
 export const readyUnits=(t,now)=>t.units.filter(u=>u.readyAt<=now);
@@ -42,7 +44,7 @@ function prepareGuardChoice(s,uid,c,at){
   const a=s.territories[c.from],b=s.territories[c.to];if(!a||!b||a.owner===b.owner)return false;
   const plan=movementPlan(s,uid,c.from,c.to,c.unitIds,at);requireGame(!plan.error,plan.error);
   const active=chooseOfficers(s,a,plan.units,'attack',at,2);if(!active.some(u=>effectNumber(u)===33))return false;
-  const result=evaluateBattle({s,from:a.id,to:b.id,attackUnits:plan.units,defendUnits:b.units,at,seed:c.seed});if(result.attack.score>result.defense.score)return false;
+  const result=evaluateBattle({s,from:a.id,to:b.id,attackUnits:plan.units,defendUnits:b.units,at,seed:c.seed});result.survivalDraws=survivalDraws(c.seed,c.id,[...plan.units,...b.units]);if(result.attack.score>result.defense.score)return false;
   const candidates=plan.units.filter(u=>[6,8,12].includes(u.sides)&&effectNumber(u)!==33).sort(officerOrder(s.seed,`${b.id}:guard`));
   if(!candidates.length)return false;
   const preview=structuredClone(s);preview.territories[a.id].units=preview.territories[a.id].units.filter(u=>!c.unitIds.includes(u.id));
@@ -78,19 +80,30 @@ function heroIndex(s){const out={};const add=(u,owner,location)=>{if(!u.heroId)r
 export function refreshIndexes(s){s.heroIndex=heroIndex(s);for(const p of Object.values(s.players)){p.rulerId=livingUnits(s,p.uid).find(u=>u.sides===20)?.id||'';p.landCount=ownedTerritories(s,p.uid).length;}return s;}
 function autoRoles(t,at){const available=t.units.filter(u=>effectOf(u)&&u.readyAt<=at);if(!t.roles.governor){const u=available.filter(u=>effectOf(u).economic).sort((a,b)=>effectOf(b).sides-effectOf(a).sides||byId(a,b))[0];if(u){t.roles.governor=u.id;t.roles.governorSince=at;}}if(!t.roles.defense.length){t.roles.defense=available.filter(u=>effectOf(u).battle&&effectOf(u).defense).sort((a,b)=>effectOf(b).sides-effectOf(a).sides||byId(a,b)).slice(0,2).map(u=>u.id);if(t.roles.defense.length)t.roles.defenseSince=at;}}
 export function upgradeWorld(raw,at=raw.updatedAt){
-  if(raw.featureVersion===4)return normalizeWorld(raw);
-  const s=raw.featureVersion===3?V3.normalizeWorld(raw):V3.upgradeWorld(raw,at);requireGame(at>=s.updatedAt,'전환 시각을 확인해 주세요.');
-  const news=V3.settleRecruitment(s,at);for(const event of news)s.history[event.id]=event;
-  s.featureVersion=4;s.heroCatalog=Object.fromEntries(EFFECTS.map(e=>[e.id,e.name]));s.rolePolicyVersion=1;s.pendingBattles={};s.effectsSince??=at;
-  let unknownBirth=0,unknownArrival=0;
-  for(const t of Object.values(s.territories)){t.settledAt=at;for(const u of t.units){const born=inheritedCreatedAt(u,s,at);if(born===at)unknownBirth++;u.createdAt=born;u.moveReadyAt=u.sides>4?u.readyAt:0;u.arrivedAt=at;u.stationTerritoryId=t.id;unknownArrival++;}const old=t.roles;t.roles={...emptyRoles(),...old,supportManual:old.support||'',policyVersion:1,policySeed:s.seed};resolveRoles(s,t,at);}
-  for(const q of Object.values(s.returnQueues))for(const u of q.units){u.createdAt=inheritedCreatedAt(u,s,at);u.moveReadyAt=u.sides>4?u.readyAt:0;u.arrivedAt=at;u.stationTerritoryId='';}
-  for(const p of Object.values(s.players))p.retreatCostD4??=0;
-  s.roleMigration={at,unknownBirth,unknownArrival};s.updatedAt=at;s.command.protocol=4;refreshIndexes(s);return normalizeWorld(s);
+  if(raw.featureVersion===5)return normalizeWorld(raw);
+  const s=V4.upgradeWorld(raw,at);requireGame(at>=s.updatedAt,'전환 시각을 확인해 주세요.');
+  requireGame(!Object.values(s.pendingBattles||{}).some(p=>p.deadline>at),'관평 선택 마감 후 전환해 주세요.','PENDING');
+  const news=V4.settleRecruitment(s,at);for(const e of news)s.history[e.id]=e;
+  s.featureVersion=5;s.command.protocol=5;const moved=[];
+  for(const t of Object.values(s.territories)){
+    const cap=capacityOf(t.id,s,at),keep=new Set([t.roles.governor,...t.units.filter(u=>u.sides===20).map(u=>u.id)]);
+    const candidates=t.units.filter(u=>!keep.has(u.id)).sort((a,b)=>a.sides-b.sides||Number(!!a.heroId)-Number(!!b.heroId)||b.arrivedAt-a.arrivedAt||b.createdAt-a.createdAt||byId(a,b));
+    const excess=candidates.slice(0,Math.max(0,t.units.length-cap)),ids=new Set(excess.map(u=>u.id));t.units=t.units.filter(u=>!ids.has(u.id));
+    for(const u of excess){u.stationTerritoryId='';moved.push({u,from:t.id,uid:t.owner});}
+  }
+  cleanRoles(s);reconcileRoles(s,at);placeQueued(s,at);
+  for(const {u,from,uid} of moved){
+    const destinations=stableDestinations(s,uid,from).sort((a,b)=>Number(adjacent(from).includes(b.id))-Number(adjacent(from).includes(a.id)));
+    const dest=destinations.find(t=>t.units.length<capacityOf(t.id,s,at));
+    if(dest){u.readyAt=Math.max(u.readyAt,at+RULES.actionMs);if(u.sides>4)u.moveReadyAt=Math.max(u.moveReadyAt,at+RULES.actionMs);stampUnit(u,at,dest.id);dest.units.push(u);}
+    else{const q=s.returnQueues[uid]??={from,at,life:s.players[uid].life,units:[]};q.units.push(u);(q.capacityOrigins??={})[u.id]=from;}
+  }
+  s.capacityMigration={at,moved:moved.length,origins:Object.fromEntries(moved.map(x=>[x.u.id,x.from]))};
+  reconcileRoles(s,at);refreshIndexes(s);s.updatedAt=at;return normalizeWorld(s);
 }
-export function createWorld(now=Date.now(),seed='samguk-main'){return upgradeWorld(V3.createWorld(now,seed),now);}
+export function createWorld(now=Date.now(),seed='samguk-main'){return upgradeWorld(V4.createWorld(now,seed),now);}
 export function normalizeWorld(raw){
-  if(raw?.featureVersion!==4)return V3.normalizeWorld(raw);
+  if(raw?.featureVersion!==5)return V4.normalizeWorld(raw);
   requireGame(raw.version===1&&raw.mapId===MAP.mapId,'전장 저장 버전이 다릅니다. 기존 기록을 보존했어요.','VERSION');const s=structuredClone(raw);
   for(const key of ['players','requests','history','receipts','returnQueues','heroIndex','pendingBattles'])s[key]??={};
   requireGame(s.rolePolicyVersion===1&&EFFECTS.every(e=>s.heroCatalog?.[e.id]===e.name),'자동 배정 정책이나 무장 명단 기록을 확인해 주세요.','CORRUPT');
@@ -117,13 +130,20 @@ function logEvent(s,c,e){s.history[c.id]={id:c.id,at:c.at,actor:c.actor,...e};}
 function resetRecruit(t,now,interval){t.lastRecruitAt=now;t.cycleMs=interval;t.nextRecruitAt=t.owner?now+interval:0;}
 function cleanRoles(s){for(const t of Object.values(s.territories)){const ids=new Set(t.units.map(u=>u.id));if(!ids.has(t.roles.governor))t.roles.governor='';t.roles.defense=t.roles.defense.filter(id=>ids.has(id));if(!ids.has(t.roles.guardTarget))t.roles.guardTarget='';if(!adjacent(t.id).includes(t.roles.support)||s.territories[t.roles.support]?.owner!==t.owner)t.roles.support='';if(s.territories[t.roles.retreat]?.owner!==t.owner||t.roles.retreat===t.id)t.roles.retreat='';}}
 function stableDestinations(s,uid,from){const p=placeInfo(from)?.coord||[0,0],distance=t=>{const q=placeInfo(t.id).coord;return Math.hypot(q[0]-p[0],q[1]-p[1]);};return ownedTerritories(s,uid).filter(t=>t.id!==from).sort((a,b)=>distance(a)-distance(b)||a.id.localeCompare(b.id));}
-function placeQueued(s,at){let changed=false;for(const [uid,q] of Object.entries(s.returnQueues)){const destinations=stableDestinations(s,uid,q.from).filter(t=>!isLocked(s,t.id)&&(t.settledAt??0)<=at);q.units.sort((a,b)=>(b.sides>4)-(a.sides>4)||b.sides-a.sides||byId(a,b));for(const t of destinations){const space=Math.max(0,capacityOf(t.id,s,at)-t.units.length);for(const u of q.units.splice(0,space)){u.readyAt=Math.max(u.readyAt,at+RULES.actionMs);stampUnit(u,at,t.id);t.units.push(u);changed=true;}}if(!q.units.length)delete s.returnQueues[uid];}return changed;}
+function placeQueued(s,at){let changed=false;for(const [uid,q] of Object.entries(s.returnQueues)){
+   q.units.sort((a,b)=>Number(!!q.capacityOrigins?.[a.id])-Number(!!q.capacityOrigins?.[b.id])||(b.sides-a.sides)||byId(a,b));
+   for(const u of q.units.slice()){
+     const origin=q.capacityOrigins?.[u.id],all=stableDestinations(s,uid,origin||q.from);if(origin&&s.territories[origin]?.owner===uid)all.unshift(s.territories[origin]);
+     const t=all.find(t=>!isLocked(s,t.id)&&(t.settledAt??0)<=at&&t.units.length<capacityOf(t.id,s,at));if(!t)continue;
+     u.readyAt=Math.max(u.readyAt,at+RULES.actionMs);if(u.sides>4)u.moveReadyAt=Math.max(u.moveReadyAt,at+RULES.actionMs);stampUnit(u,at,t.id);t.units.push(u);q.units=q.units.filter(x=>x.id!==u.id);if(origin)delete q.capacityOrigins[u.id];changed=true;
+   }if(!q.units.length)delete s.returnQueues[uid];
+ }return changed;}
 function spawnRecruit(s,t,at){const rng=seededRandom(`${s.seed}:${t.id}:${t.generation}:${at}`);let sides=unitTier(rng(),economy(s,t,at).probabilities),e=null;if(sides>4){const pool=EFFECTS.filter(e=>e.sides===sides&&!s.heroIndex[e.id]);if(pool.length)e=pool[Math.floor(rng()*pool.length)];else sides=4;}const u={id:`recruit:${t.id}:${t.generation}:${at}`,name:e?.name||'병사',sides,readyAt:at};if(e){u.heroId=e.id;u.effectState=newEffectState();}return stampUnit(u,at,t.id);}
 function bonusSoldier(t,at,tag){return stampUnit({id:`bonus:${t.id}:${t.generation}:${at}:${tag}`,name:'병사',sides:4,readyAt:at},at,t.id);}
 function nextEffectEvents(s,now,cursor){const events=[];for(const t of Object.values(s.territories)){if(!t.owner||isLocked(s,t.id))continue;const localCursor=t.settledAt??cursor;for(const unit of t.units)if(unit.readyAt>localCursor&&unit.readyAt<=now)events.push({at:unit.readyAt,t,type:'roles'});if(t.nextRecruitAt&&t.nextRecruitAt<=now)events.push({at:Math.max(localCursor,t.nextRecruitAt),t,type:'regular'});const u=governor(s,t,localCursor),n=effectNumber(u);if(!u)continue;const prepared=preparedSince(t,u)+30*MINUTE,st=u.effectState;if(n===94&&prepared<=now&&st.capacityStamp!==prepared)events.push({at:Math.max(localCursor,prepared),t,u,type:'capacity'});const giftAt=Math.max(localCursor,prepared);if(n===81&&!st.firstGift&&giftAt<=now&&t.units.length<capacityOf(t.id,s,giftAt))events.push({at:giftAt,t,u,type:'gift'});}return events.sort((a,b)=>a.at-b.at||a.t.id.localeCompare(b.t.id)||a.type.localeCompare(b.type));}
-export function hasDueRecruitment(s,now){if(s.featureVersion!==4)return V3.hasDueRecruitment(s,now);return Object.values(s.pendingBattles||{}).some(p=>p.deadline<=now)||nextEffectEvents(s,now,s.updatedAt).length>0||Object.entries(s.returnQueues||{}).some(([uid])=>ownedTerritories(s,uid).some(t=>!isLocked(s,t.id)&&t.units.length<capacityOf(t.id,s,now)));}
+export function hasDueRecruitment(s,now){if(s.featureVersion!==5)return V4.hasDueRecruitment(s,now);return Object.values(s.pendingBattles||{}).some(p=>p.deadline<=now)||nextEffectEvents(s,now,s.updatedAt).length>0||Object.entries(s.returnQueues||{}).some(([uid])=>ownedTerritories(s,uid).some(t=>!isLocked(s,t.id)&&t.units.length<capacityOf(t.id,s,now)));}
 export function settleRecruitment(s,now){
-  if(s.featureVersion!==4)return V3.settleRecruitment(s,now);const news=[];let cursor=s.updatedAt;
+  if(s.featureVersion!==5)return V4.settleRecruitment(s,now);const news=[];let cursor=s.updatedAt;
   settleExpiredBattles(s,now);placeQueued(s,cursor);refreshIndexes(s);
   for(let steps=0;;steps++){
     requireGame(steps<10000,'충원 정산량을 확인해 주세요.','SETTLEMENT');const ev=nextEffectEvents(s,now,cursor)[0];if(!ev)break;cursor=ev.at;const {t,at,u,type}=ev;
@@ -141,7 +161,7 @@ export function settleRecruitment(s,now){
   }
   reconcileRoles(s,now);placeQueued(s,now);for(const t of Object.values(s.territories))if(t.owner&&!isLocked(s,t.id))t.settledAt=now;refreshIndexes(s);return news;
 }
-export function projectWorld(world,now){if(world.featureVersion!==4)return V3.projectWorld(world,now);const s=structuredClone(world);settleRecruitment(s,now);Object.defineProperty(s,'projectedAt',{value:now,enumerable:false});return s;}
+export function projectWorld(world,now){if(world.featureVersion!==5)return V4.projectWorld(world,now);const s=structuredClone(world);settleRecruitment(s,now);Object.defineProperty(s,'projectedAt',{value:now,enumerable:false});return s;}
 export function materializeTerritory(s,id,now){settleRecruitment(s,now);return s.territories[id];}
 export function movementPlan(s,uid,from,to,ids,now){
   const a=s.territories[from],b=s.territories[to];if(isLocked(s,from)||isLocked(s,to))return {error:'관평 호위 선택 중인 영토입니다. 잠시 후 다시 시도해 주세요.'};if(!a||!b||!adjacent(from).includes(to))return {error:'변으로 맞닿은 영토로만 이동하거나 공격할 수 있어요.'};if(a.owner!==uid)return {error:'내 영토에서 출발해야 합니다.'};if(now<a.actionReadyAt&&!(b.owner===uid&&Array.isArray(ids)&&ids.length&&ids.every(id=>a.units.some(u=>u.id===id&&u.sides>4))))return {error:`출발 영토의 다음 행동까지 ${clockText(a.actionReadyAt-now)} 남았어요.`};
@@ -167,23 +187,30 @@ function assign(s,uid,c,now){const t=s.territories[c.territoryId];requireGame(t?
   if(c.guardTargetId!==undefined){requireGame(t.units.some(u=>effectNumber(u)===33),'관평이 주둔한 영토에서 정해 주세요.');if(c.guardTargetId)requireGame(t.units.some(u=>u.id===c.guardTargetId&&effectNumber(u)!==33&&[6,8,12].includes(u.sides)),'같은 도시의 다른 장수를 선택해 주세요.');r.guardTarget=c.guardTargetId;}
   resolveRoles(s,t,now);
 }
-const losses=(units,count,rate)=>{const dead=units.slice().sort((a,b)=>a.sides-b.sides||byId(a,b)).slice(0,casualtyCount(units.length,count,rate)),deadIds=new Set(dead.map(u=>u.id));return {dead,survivors:units.filter(u=>!deadIds.has(u.id))};};
+const losses=(units,policy)=>{const dead=units.slice().sort((a,b)=>a.sides-b.sides||byId(a,b)).slice(0,winnerLoss(units.length,policy)),deadIds=new Set(dead.map(u=>u.id));return {dead,survivors:units.filter(u=>!deadIds.has(u.id))};};
 function executeBattle(s,uid,c,plan,now){
   const a=s.territories[c.from],b=s.territories[c.to],defender=b.owner,retreat=b.roles.retreat,defenseGuard=b.roles.guardTarget,attackUnits=plan.units,defendUnits=b.units.slice(),ownBefore=ownedTerritories(s,uid).map(t=>t.id);
   for(const t of ownedTerritories(s,uid))t.protectionUntil=0;a.lastAttackAt=now;b.lastAttackAt=now;
   const result=c.frozenResult||evaluateBattle({s,from:a.id,to:b.id,attackUnits,defendUnits,attackIds:c.attackHeroIds||[],at:now,seed:c.seed});const won=result.attack.score>result.defense.score,activeAttack=result.attack.chosen.map(id=>attackUnits.find(u=>u.id===id)).filter(Boolean),activeDefense=result.defense.chosen.map(id=>defendUnits.find(u=>u.id===id)).filter(Boolean);
+  const policy=combatPolicy(result.attack.score,result.defense.score),draws=result.survivalDraws||survivalDraws(c.seed,c.id,[...attackUnits,...defendUnits]),attempts=[];
   let attackDead,defendDead,attackSurvivors=[],defendSurvivors=[],returned=[],stationed=[];const escaped=[],retreatCosts=[];
-  if(won){const loss=losses(attackUnits,defendUnits.length,RULES.attackLoss);attackDead=loss.dead;attackSurvivors=loss.survivors;defendDead=defendUnits.slice();}
-  else{attackDead=attackUnits.slice();const loss=losses(defendUnits,attackUnits.length,RULES.defenseLoss);defendDead=loss.dead;defendSurvivors=loss.survivors;}
+  if(won){const loss=losses(attackUnits,policy);attackDead=loss.dead;attackSurvivors=loss.survivors;defendDead=defendUnits.slice();}
+  else{attackDead=attackUnits.slice();const loss=losses(defendUnits,policy);defendDead=loss.dead;defendSurvivors=loss.survivors;}
   // Winner protection removes actual prospective D4 casualties only.
   for(const u of won?activeAttack:activeDefense){const n=effectNumber(u);if((won&&n===36)||(!won&&n===41)||(!won&&n===57&&reusable(u,now,1440))){const dead=won?attackDead:defendDead,target=dead.find(x=>x.sides===4);if(target){dead.splice(dead.indexOf(target),1);(won?attackSurvivors:defendSurvivors).push(target);if(n===57)markProc(u,now);}}}
   // Complete the occupation before routing defeated defenders.
   if(won){b.owner=uid;b.units=[];b.roles=emptyRoles();b.generation++;b.actionReadyAt=now+RULES.actionMs;b.protectionUntil=0;resetRecruit(b,now,RULES.recruitMs);s.players[uid].captures++;}
   else b.units=defendSurvivors;
-  const loser=won?activeDefense:activeAttack,dead=won?defendDead:attackDead,loserUid=won?defender:uid,sacrificed=new Set();
+  const loser=won?activeDefense:activeAttack,dead=won?defendDead:attackDead,loserUid=won?defender:uid,sacrificed=new Set(),specialDraws=new Set();
   const route=u=>{const plan=retreatPlan(s,loserUid,b.id,u,now,c.id);if(!plan)return false;const dest=s.territories[plan.to];if(plan.cost){dest.units=dest.units.filter(x=>x.id!==plan.cost.id);retreatCosts.push({unit:structuredClone(plan.cost),owner:loserUid,to:dest.id});}u.readyAt=Math.max(u.readyAt,now+RULES.escapeMs);stampUnit(u,now,dest.id);dest.units.push(u);dead.splice(dead.findIndex(x=>x.id===u.id),1);escaped.push({unit:structuredClone(u),to:dest.id,cost:plan.cost?.id||''});return true;};
-  for(const u of loser.filter(u=>[11,27,33].includes(effectNumber(u))).sort(officerOrder(s.seed,`${b.id}:guard`))){const n=effectNumber(u);let target;if(n===33&&!(c.guardChoice==='none'&&!won))target=dead.find(x=>x.id===(won?defenseGuard:(c.guardChoice||c.guardTargetId||a.roles.guardTarget))&&x.id!==u.id&&[6,8,12].includes(x.sides))||dead.filter(x=>x.id!==u.id&&[6,8,12].includes(x.sides)).sort((x,y)=>officerOrder(s.seed,`${b.id}:guard`)(x,y))[0];else if(n!==33&&(n===11||defendOrAttackInfantry(won?defendUnits:attackUnits)>=2))target=dead.find(x=>x.sides===20);if(target&&route(target))sacrificed.add(u.id);}
-  for(const u of loser.slice().sort(officerOrder(s.seed,`${b.id}:escape`))){if(!dead.some(x=>x.id===u.id)||sacrificed.has(u.id))continue;const n=effectNumber(u),st=stateOf(u),limit=n===6?2:1,valid=n===6||n===40||n===77&&defendOrAttackInfantry(won?defendUnits:attackUnits)>=3||n===50;if(!valid||st.escapes>=(n===50?2:limit))continue;if(n===50&&seededRandom(`${c.seed}:escape:${u.id}:${st.escapes}`)()>=.5)continue;if(route(u))st.escapes++;}
+  for(const u of loser.filter(u=>[11,27,33].includes(effectNumber(u))).sort(officerOrder(s.seed,`${b.id}:guard`))){const n=effectNumber(u);let target;if(n===33&&!(c.guardChoice==='none'&&!won))target=dead.find(x=>x.id===(won?defenseGuard:(c.guardChoice||c.guardTargetId||a.roles.guardTarget))&&x.id!==u.id&&[6,8,12].includes(x.sides))||dead.filter(x=>x.id!==u.id&&[6,8,12].includes(x.sides)).sort((x,y)=>officerOrder(s.seed,`${b.id}:guard`)(x,y))[0];else if(n!==33&&(n===11||defendOrAttackInfantry(won?defendUnits:attackUnits)>=2))target=dead.find(x=>x.sides===20);if(target&&route(target)){escaped.at(-1).cause='guard';sacrificed.add(u.id);}}
+  for(const u of loser.slice().sort(officerOrder(s.seed,`${b.id}:escape`))){if(!dead.some(x=>x.id===u.id)||sacrificed.has(u.id))continue;const n=effectNumber(u),st=stateOf(u),limit=n===6?2:1,valid=n===6||n===40||n===77&&defendOrAttackInfantry(won?defendUnits:attackUnits)>=3||n===50;if(!valid||st.escapes>=(n===50?2:limit))continue;if(n===50){specialDraws.add(u.id);if(seededRandom(`${c.seed}:escape:${u.id}:${st.escapes}`)()>=.5)continue;}if(route(u)){escaped.at(-1).cause='special';st.escapes++;}}
+  for(const u of dead.slice().sort(officerOrder(s.seed,b.id+':general-survival'))){
+    if(![6,8,12].includes(u.sides)||sacrificed.has(u.id)||specialDraws.has(u.id)||!policy.survival)continue;
+    const roll=draws[u.id],passed=roll<policy.survival;let survived=false;
+    if(passed){survived=route(u);if(survived)escaped.at(-1).cause='general';}
+    attempts.push({id:u.id,name:u.name,roll,probability:policy.survival,passed,survived,reason:survived?'retreated':passed?'no-space':'draw-failed'});
+  }
   if(won){attackSurvivors.forEach(u=>{u.readyAt=Math.max(u.readyAt,now+RULES.actionMs);if(u.sides>4)u.moveReadyAt=now+RULES.actionMs;stampUnit(u,now,b.id);});const cap=capacityOf(b.id,s,now),excess=Math.max(0,attackSurvivors.length-cap);returned=attackSurvivors.slice().sort((x,y)=>x.sides-y.sides||byId(x,y)).slice(0,excess);const ids=new Set(returned.map(u=>u.id));stationed=attackSurvivors.filter(u=>!ids.has(u.id));b.units=stationed;returned.forEach(u=>stampUnit(u,now,a.id));a.units.push(...returned);}
   for(const [units,victory,attack] of [[attackUnits,won,true],[defendUnits,!won,false]])for(const u of units)if(u.heroId){const st=stateOf(u);if(attack){st.attacks++;st.lastAttackAt=now;st.lastAttackWon=won;}if(victory)st.wins++;if(!attack&&effectNumber(u)===30)st.defended[b.id]=true;}
   for(const usage of [...result.attack.used,...result.defense.used]){const u=[...attackUnits,...defendUnits].find(u=>u.id===usage.id);if(u)markProc(u,now);}
@@ -191,8 +218,8 @@ function executeBattle(s,uid,c,plan,now){
   if(defender&&won&&!ownedTerritories(s,defender).length){s.players[defender].eliminatedAt=now;s.players[defender].defeats++;delete s.returnQueues[defender];}
   s.players[uid].kills+=defendDead.length;s.players[uid].deaths+=attackDead.length;if(defender){s.players[defender].kills+=attackDead.length;s.players[defender].deaths+=defendDead.length;}
   for(const cost of retreatCosts)s.players[cost.owner].retreatCostD4+=1;
-  const r={friendly:false,from:a.id,to:b.id,attacker:uid,defender,attack:result.attack.dice,defend:result.defense.dice,retreatCosts,raw:result.attack.baseRaw,score:result.attack.score,defense:result.defense.score,won,attackDead:structuredClone(attackDead),defendDead:structuredClone(defendDead),stationed:structuredClone(stationed),returned:structuredClone(returned),defendSurvivors:structuredClone(defendSurvivors),escaped,effects:result};
-  logEvent(s,c,{type:'battle',from:a.id,to:b.id,text:`${s.players[uid].name} · ${placeInfo(b.id).ko} ${won?'점령':'공격 실패'} · ${r.score}:${r.defense} · 공격군 −${attackDead.length} / 수비군 −${defendDead.length}${escaped.length?' · 탈출 '+escaped.length+'명':''}${retreatCosts.length?' · 구조 비용 D4 '+retreatCosts.length+'명':''}`,result:r});
+  const r={combatVersion:5,policy,survivalAttempts:attempts,friendly:false,from:a.id,to:b.id,attacker:uid,defender,attack:result.attack.dice,defend:result.defense.dice,retreatCosts,raw:result.attack.baseRaw,score:result.attack.score,defense:result.defense.score,won,attackDead:structuredClone(attackDead),defendDead:structuredClone(defendDead),stationed:structuredClone(stationed),returned:structuredClone(returned),defendSurvivors:structuredClone(defendSurvivors),escaped,effects:result};
+  logEvent(s,c,{type:'battle',from:a.id,to:b.id,text:`${s.players[uid].name} · ${placeInfo(b.id).ko} ${won?'점령':'공격 실패'} · ${r.score}:${r.defense} · ${policy.grade}(차이 ${policy.delta}) · 공격군 −${attackDead.length} / 수비군 −${defendDead.length}${escaped.length?' · 탈출 '+escaped.length+'명':''}${retreatCosts.length?' · 구조 비용 D4 '+retreatCosts.length+'명':''}`,result:r});
 }
 const defendOrAttackInfantry=units=>units.filter(u=>u.sides===4).length;
 function commandOrigins(before,after){const old=new Map(),origins={};for(const t of Object.values(before.territories))t.units.forEach((u,slot)=>old.set(u.id,{kind:'territory',territoryId:t.id,owner:t.owner,slot}));for(const [owner,q] of Object.entries(before.returnQueues||{}))q.units.forEach((u,slot)=>old.set(u.id,{kind:'queue',territoryId:'',owner,slot}));const inspect=(u,location)=>{const prior=old.get(u.id);if(prior&&JSON.stringify(prior)!==JSON.stringify(location))origins[u.id]=prior;};for(const t of Object.values(after.territories))t.units.forEach((u,slot)=>inspect(u,{kind:'territory',territoryId:t.id,owner:t.owner,slot}));for(const [owner,q] of Object.entries(after.returnQueues))q.units.forEach((u,slot)=>inspect(u,{kind:'queue',territoryId:'',owner,slot}));return origins;}
@@ -203,7 +230,7 @@ function executeMove(s,uid,c,now){if(!c.finalizing&&prepareGuardChoice(s,uid,c,n
   const heroes=plan.units.filter(u=>u.sides>4);if(heroes.length)logEvent(s,c,{type:'move',from:a.id,to:b.id,heroes:heroes.map(u=>({id:u.id,name:u.name,sides:u.sides})),exchange:plan.exchange,text:`${s.players[uid].name} · ${heroes.map(u=>u.name).join(', ')} · ${placeInfo(a.id).ko} → ${placeInfo(b.id).ko}${plan.exchange?' · D4 '+plan.exchange+'명 교환':''}`,result:{friendly:true,from:a.id,to:b.id,count:plan.units.length,exchange:plan.exchange}});
 }
 export function applyCommand(raw,actor,command,now=command.at){
-  if(raw.featureVersion!==4)return V3.applyCommand(raw,actor,command,now);
+  if(raw.featureVersion!==5)return V4.applyCommand(raw,actor,command,now);
   const s=normalizeWorld(raw);requireGame(actor&&typeof actor==='string','접속자를 확인할 수 없어요.');requireGame(command&&/^[\w-]{8,100}$/.test(command.id),'명령 번호를 확인할 수 없어요.');if(s.receipts[command.id])return s;
   requireGame(!s.maintenance,'업데이트 점검 중입니다. 잠시 뒤 새로고침해 주세요.','MAINTENANCE');requireGame(command.baseRevision===s.revision,'다른 명령이 먼저 도착했습니다. 최신 전황으로 다시 확인합니다.','CONFLICT');requireGame(Number.isFinite(now)&&now>=s.updatedAt,'전장의 시각을 다시 확인해 주세요.','CLOCK');
   for(const [id,revision] of Object.entries(command.expectedTerritories||{}))requireGame(s.territories[id]?.revision===revision,'선택한 영토가 바뀌었습니다. 다시 확인해 주세요.','TERRITORY_CONFLICT');
@@ -223,9 +250,9 @@ export function applyCommand(raw,actor,command,now=command.at){
   else requireGame(c.type==='recruit','새 전장에서는 승인 요청·승인·거절 절차를 사용하지 않습니다.');
   cleanRoles(s);reconcileRoles(s,now);placeQueued(s,now);refreshIndexes(s);
   for(const t of Object.values(s.territories)){t.battleLock=Object.values(s.pendingBattles||{}).find(p=>p.locks[t.id])?.id||'';if(t.owner&&!isLocked(s,t.id)){const cap=capacityOf(t.id,s,now),wasFull=before[t.id].units.length>=capacityOf(t.id,raw,now);if(t.units.length>=cap)t.nextRecruitAt=0;else if(!t.nextRecruitAt||wasFull&&t.units.length<before[t.id].units.length)resetRecruit(t,now,economy(s,t,now).interval);}if(JSON.stringify({...t,revision:0})!==JSON.stringify({...before[t.id],revision:0}))t.revision=before[t.id].revision+1;}
-  c.resolved={};c.resolutionByTerritory={};c.resolutionByPlayer={};for(const p of Object.values(pendingBefore))if(!s.pendingBattles[p.id]){c.resolved[p.id]=true;for(const id of Object.keys(p.locks))c.resolutionByTerritory[id]=p.id;c.resolutionByPlayer[p.actor]=p.id;const defender=raw.territories[p.to].owner;if(defender)c.resolutionByPlayer[defender]=p.id;}for(const e of news)s.history[e.id]=e;s.history=trim(s.history,100);s.revision++;s.updatedAt=now;s.command={id:c.id,type:c.type,actor,at:now,baseRevision:command.baseRevision,from:c.from||'',to:c.to||c.territoryId||'',battleId:c.battleId||'',resolved:c.resolved||{},resolutionByTerritory:c.resolutionByTerritory||{},resolutionByPlayer:c.resolutionByPlayer||{},guardChoice:c.guardChoice||'',officerMove:c.type==='move'&&raw.territories[c.to]?.owner===actor&&Array.isArray(c.unitIds)&&c.unitIds.length>0&&c.unitIds.every(id=>raw.territories[c.from]?.units.some(u=>u.id===id&&u.sides>4)),seed:c.seed??0,protocol:4,origins:commandOrigins(raw,s)};s.receipts[c.id]={at:now,actor};s.receipts=trim(s.receipts,100);return normalizeWorld(s);
+  c.resolved={};c.resolutionByTerritory={};c.resolutionByPlayer={};for(const p of Object.values(pendingBefore))if(!s.pendingBattles[p.id]){c.resolved[p.id]=true;for(const id of Object.keys(p.locks))c.resolutionByTerritory[id]=p.id;c.resolutionByPlayer[p.actor]=p.id;const defender=raw.territories[p.to].owner;if(defender)c.resolutionByPlayer[defender]=p.id;}for(const e of news)s.history[e.id]=e;s.history=trim(s.history,100);s.revision++;s.updatedAt=now;s.command={id:c.id,type:c.type,actor,at:now,baseRevision:command.baseRevision,from:c.from||'',to:c.to||c.territoryId||'',battleId:c.battleId||'',resolved:c.resolved||{},resolutionByTerritory:c.resolutionByTerritory||{},resolutionByPlayer:c.resolutionByPlayer||{},guardChoice:c.guardChoice||'',officerMove:c.type==='move'&&raw.territories[c.to]?.owner===actor&&Array.isArray(c.unitIds)&&c.unitIds.length>0&&c.unitIds.every(id=>raw.territories[c.from]?.units.some(u=>u.id===id&&u.sides>4)),seed:c.seed??0,protocol:5,origins:commandOrigins(raw,s)};s.receipts[c.id]={at:now,actor};s.receipts=trim(s.receipts,100);return normalizeWorld(s);
 }
-export function leaderboard(s,sort='territories'){if(s.featureVersion!==4)return V3.leaderboard(s,sort);const keys={territories:['territories','army','kills'],army:['army','territories','kills'],kills:['kills','territories','army'],deaths:['deaths','territories','army']}[sort]||['territories','army','kills'];const rows=Object.values(s.players).map(p=>({...p,territories:ownedTerritories(s,p.uid).length,army:livingUnits(s,p.uid).length,queued:queuedUnits(s,p.uid).length,kills:p.kills||0,deaths:p.deaths||0}));rows.sort((a,b)=>keys.reduce((n,key)=>n||b[key]-a[key],0)||a.joinedAt-b.joinedAt||a.uid.localeCompare(b.uid));let rank=0;return rows.map((r,i)=>{if(!i||keys.some(k=>r[k]!==rows[i-1][k]))rank=i+1;return {...r,rank};});}
+export function leaderboard(s,sort='territories'){if(s.featureVersion!==5)return V4.leaderboard(s,sort);const keys={territories:['territories','army','kills'],army:['army','territories','kills'],kills:['kills','territories','army'],deaths:['deaths','territories','army']}[sort]||['territories','army','kills'];const rows=Object.values(s.players).map(p=>({...p,territories:ownedTerritories(s,p.uid).length,army:livingUnits(s,p.uid).length,queued:queuedUnits(s,p.uid).length,kills:p.kills||0,deaths:p.deaths||0}));rows.sort((a,b)=>keys.reduce((n,key)=>n||b[key]-a[key],0)||a.joinedAt-b.joinedAt||a.uid.localeCompare(b.uid));let rank=0;return rows.map((r,i)=>{if(!i||keys.some(k=>r[k]!==rows[i-1][k]))rank=i+1;return {...r,rank};});}
 export const visibleHistory=s=>Object.values(s.history||{}).filter(e=>!(e.type==='hero'&&e.unit?.sides===6)&&!(e.type==='move'&&!e.heroes?.length)).sort((a,b)=>b.at-a.at||b.id.localeCompare(a.id));
-export const systemEvents=(before,after)=>after.featureVersion!==4?V3.systemEvents(before,after):Object.values(after.history).filter(e=>['hero','revive','update'].includes(e.type)&&!(e.type==='hero'&&e.unit?.sides===6)&&!before.history?.[e.id]).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));
+export const systemEvents=(before,after)=>after.featureVersion!==5?V4.systemEvents(before,after):Object.values(after.history).filter(e=>['hero','revive','update'].includes(e.type)&&!(e.type==='hero'&&e.unit?.sides===6)&&!before.history?.[e.id]).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));
 export function estimateBattle(s,from,to,units,ids,at,samples=8192){const t=s.territories[to],active=battleOfficers(s.territories[from],units,ids,at,true,s),defense=battleOfficers(t,t.units,undefined,at,false,s);if(!active.length&&!defense.length)return {chance:winProbability(units,t.units),approximate:false};let wins=0;const key=hash32(`estimate:${s.revision}:${from}:${to}:${units.map(u=>u.id).join(',')}:${ids.join(',')}:${Math.floor(at/MINUTE)}`);for(let i=0;i<samples;i++){const r=evaluateBattle({s,from,to,attackUnits:units,defendUnits:t.units,attackIds:ids,at,seed:key+i});if(r.attack.score>r.defense.score)wins++;}return {chance:wins/samples,approximate:true};}

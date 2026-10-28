@@ -1,5 +1,5 @@
 import {fixture as legacyFixture,hero,soldier,T} from './v3-helpers.mjs';
-import {upgradeWorld,applyCommand,refreshIndexes,reconcileRoles} from '../src/engine.js';
+import {upgradeWorld,applyCommand,refreshIndexes,reconcileRoles} from '../src/engine-v4.js';
 export {hero,soldier,T};
 let serial=0;
 export const command=(s,uid,type,fields={},at=s.updatedAt)=>applyCommand(s,uid,{id:`v4-test-${++serial}`,type,baseRevision:s.revision,at,...fields});

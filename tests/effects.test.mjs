@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MINUTE,RULES,refreshIndexes,projectWorld,capacityOf,adjacent,livingUnits} from '../src/engine.js';
+import {MINUTE,RULES,refreshIndexes,projectWorld,capacityOf,adjacent,livingUnits} from '../src/engine-v4.js';
 import {EFFECTS,economy,regularRecruitBonus,evaluateBattle,moveTiming,newEffectState} from '../src/hero-effects.js';
 import {T,hero,soldier,fixture,command} from './v3-helpers.mjs';
 const covered=new Set();

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorld,upgradeWorld,normalizeWorld,applyCommand,projectWorld,refreshIndexes,reconcileRoles,capacityOf,adjacent,retreatPlan,maximumMove,movementPlan,myPendingBattle,isLocked,GUARD_CHOICE_MS,livingUnits,RELEASE,MINUTE} from '../src/engine.js';
+import {createWorld,upgradeWorld,normalizeWorld,applyCommand,projectWorld,refreshIndexes,reconcileRoles,capacityOf,adjacent,retreatPlan,maximumMove,movementPlan,myPendingBattle,isLocked,GUARD_CHOICE_MS,livingUnits,RELEASE,MINUTE} from '../src/engine-v4.js';
 import {chooseOfficers,resolveRoles,officerOrder} from '../src/role-policy.js';
 import {fixture,hero,soldier,command,restamp,T} from './v4-helpers.mjs';
 
