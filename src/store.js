@@ -1,5 +1,7 @@
+const indexEntry=result=>({id:result.id,title:result.title,endedAt:result.endedAt});
+import {seasonClosed} from './season-policy.js';
 import {canWrite} from './field-ui.js';
-import {worldWritable,activeWorld} from './seasons.js';
+import {worldWritable,activeWorld,createSeasonWorld,followingSeason} from './seasons.js';
 import {createWorld,normalizeWorld,upgradeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
 export const commandId=()=>crypto.randomUUID();
@@ -49,11 +51,11 @@ export class FirebaseStore {
       else{const provider=new this.authSdk.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});user=(await this.authSdk.signInWithPopup(this.auth,provider)).user;}
     }
     this.uid=user.uid;this.profileName=name||user.displayName||'새 군주';
-    if(this.config.seasons)this.config.worldId=activeWorld(this.now());
-    const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatPath=this.config.worldId==='season-1'?'chat/season-1':'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
+    if(this.config.seasons){const index=(await this.sdk.get(this.sdk.ref(this.db,'seasonIndex'))).val()||{};this.config.worldId=Object.keys(index).filter(id=>/^season-[0-9]+$/.test(id)).sort((a,b)=>Number(b.slice(7))-Number(a.slice(7)))[0]||activeWorld(this.now());for(let tries=0;tries<4;tries++){const snap=await this.sdk.get(this.sdk.ref(this.db,'worlds/'+this.config.worldId)),prev=snap.val();if(prev?.players?.[this.uid]?.nameChosen)this.publicName=prev.players[this.uid].name;if(prev?.season?.endedAt)await this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(prev.season.result)).catch(()=>{});if(prev?.season?.deadline&&this.now()>=prev.season.deadline&&!prev.season.endedAt){const before=normalizeWorld(prev),command={id:commandId(),type:'recruit',at:this.now(),baseRevision:before.revision},ended=applyCommand(before,this.uid,command,command.at);const chatPath='chat/'+this.config.worldId,chat=(await this.sdk.get(this.sdk.ref(this.db,chatPath))).val(),nextChat=appendSystemMessages(chat,systemEvents(before,ended),this.uid,command.at),patch={};for(const[k,v]of Object.entries(changedPaths(before,ended)))patch['worlds/'+this.config.worldId+'/'+k]=v;for(const[k,v]of Object.entries(changedPaths(chat,nextChat)))patch[chatPath+'/'+k]=v;await this.sdk.update(this.sdk.ref(this.db),patch);continue;}const next=prev?followingSeason(prev,this.now()):null;if(!next)break;this.config.worldId='season-'+next.number;const nextRef=this.sdk.ref(this.db,'worlds/'+this.config.worldId);const result=await this.sdk.runTransaction(nextRef,current=>{if(current)return;const initial=createSeasonWorld(next.number,next.startAt,'samguk:'+this.config.worldId+':'+entropy());initial.command.actor=this.uid;return initial;},{applyLocally:false});if(result.committed||result.snapshot.exists())continue;throw new GameError('새 시즌을 준비하지 못했습니다. 다시 연결해 주세요.');}}
+    const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatPath=/^season-/.test(this.config.worldId)?'chat/'+this.config.worldId:'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
     let raw=(await this.sdk.get(this.ref)).val();
     if(!raw){const initial=createWorld(this.now(),`samguk:${this.config.worldId||'main'}:${entropy()}`);initial.command.actor=this.uid;const result=await this.sdk.runTransaction(this.ref,current=>current?undefined:initial,{applyLocally:false});raw=result.committed?result.snapshot.val():(await this.sdk.get(this.ref)).val();}
-    this.world=normalizeWorld(raw);this.worldReady=true;
+    this.world=normalizeWorld(raw);this.worldReady=true;if(this.world.season?.endedAt)this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(this.world.season.result)).catch(()=>{});
     this.stops.push(this.sdk.onValue(this.ref,snap=>{if(!snap.exists()){this.worldReady=false;this.onConnection(false,'전황을 다시 확인해야 합니다.');return;}try{const world=normalizeWorld(snap.val());this.worldReady=true;this.observed=world;if(world.command.id===this.pendingId)return;this.world=world;this.onWorld(world);}catch(error){this.worldReady=false;this.onConnection(false,error.message);}},error=>{this.worldReady=false;this.onConnection(false,firebaseMessage(error));}));
     this.stops.push(this.sdk.onValue(this.chatRef,snap=>{this.chat=snap.val();this.chatReady=true;this.onChat(this.chat);this.onConnection(this.connected);},error=>{this.chatReady=false;this.onConnection(false,firebaseMessage(error));}));
     // .info is maintained locally by the SDK. A server get() is not supported
@@ -61,11 +63,12 @@ export class FirebaseStore {
     this.connected=await new Promise(resolve=>this.sdk.onValue(this.sdk.ref(this.db,'.info/connected'),snap=>resolve(snap.val()===true),{onlyOnce:true}));
     // A Google identity authenticates access; the player chooses the public
     // ruler name separately before a profile is registered or migrated.
-    this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
+    if(this.config.seasons&&this.world.featureVersion===6&&!this.world.players[this.uid]&&this.publicName&&!seasonClosed(this.world,this.now())){await this.retryRead();await this.submit({type:'register',name:this.publicName});}this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
   }
   async retryRead(){if(this.reading)return this.reading;this.reading=(async()=>{try{const [w,c]=await Promise.all([this.sdk.get(this.ref),this.sdk.get(this.chatRef)]);const world=normalizeWorld(w.val());this.world=world;this.observed=world;this.chat=c.val();this.worldReady=true;this.chatReady=true;this.onWorld(world);this.onChat(this.chat);this.onConnection(this.connected);}catch(error){this.worldReady=false;this.chatReady=false;this.onConnection(false,firebaseMessage(error));throw error;}finally{this.reading=null;}})();return this.reading;}
   submit(spec){return this.serialize(()=>this.performCommand(spec));}
   async performCommand(spec){
+    if(seasonClosed(this.world,this.now())&&(this.world.season?.endedAt||spec.type!=='recruit'))throw new GameError('시즌이 종료되었습니다. 최종 결과를 확인해 주세요.','SEASON_CLOSED');
     if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('시즌 종료 또는 개막 대기 중입니다. 랭킹과 최종 지도만 볼 수 있습니다.','SEASON_CLOSED');
     if(!canWrite(this))throw new GameError('전황·채팅을 다시 확인해야 합니다. 다시 연결 버튼을 눌러 주세요.','OFFLINE');
     const id=spec.id||commandId();let at=Math.max(this.now(),this.world.updatedAt);
@@ -75,8 +78,8 @@ export class FirebaseStore {
         const before=this.world;
         if(before.receipts[id])return {world:before,event:before.history[id]||null};
         at=Math.max(at,before.updatedAt);
-        if(spec.type==='recruit'&&((before.featureVersion===2&&before.rosterVersion===1)||(before.featureVersion>=3&&before.rosterVersion===2))&&!hasDueRecruitment(before,at))return {world:before,event:null};
-        const command={...spec,id,at,baseRevision:before.revision};const next=applyCommand(before,this.uid,command,at),events=systemEvents(before,next);const patch=changedPaths(before,next);
+        if(spec.type==='recruit'&&((before.featureVersion===2&&before.rosterVersion===1)||(before.featureVersion>=3&&before.rosterVersion===2))&&!hasDueRecruitment(before,at)&&!seasonClosed(before,at)&&(!this.config.seasons||before.season))return {world:before,event:null};
+        const command={...spec,...(this.config.seasons&&this.config.worldId==='season-1'?{seasonId:'season-1'}:{}),id,at,baseRevision:before.revision};const next=applyCommand(before,this.uid,command,at),events=systemEvents(before,next);const patch=changedPaths(before,next);
         try{
           if(events.length){
             const nextChat=appendSystemMessages(this.chat,events,this.uid,this.now()),rootPatch={};
@@ -84,7 +87,7 @@ export class FirebaseStore {
             for(const [path,value] of Object.entries(changedPaths(this.chat,nextChat)))rootPatch[`${this.chatPath||'chat/global'}/${path}`]=value;
             await this.sdk.update(this.sdk.ref(this.db),rootPatch);this.chat=nextChat;this.onChat(nextChat);
           }else await this.sdk.update(this.ref,patch);
-          this.pendingId=null;this.world=this.observed?.revision>next.revision?this.observed:next;this.onWorld(this.world);return {world:this.world,event:this.world.history[id]||next.history[id]||null};
+          if(next.season?.endedAt)this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(next.season.result)).catch(()=>{});this.pendingId=null;this.world=this.observed?.revision>next.revision?this.observed:next;this.onWorld(this.world);return {world:this.world,event:this.world.history[id]||next.history[id]||null};
         }catch(error){
           const [worldSnap,chatSnap]=await Promise.all([this.sdk.get(this.ref),this.sdk.get(this.chatRef)]);const current=normalizeWorld(worldSnap.val());this.world=current;this.chat=chatSnap.val();this.onChat(this.chat);
           if(current.receipts[id]){this.pendingId=null;this.onWorld(current);return {world:current,event:current.history[id]||null};}
@@ -96,6 +99,7 @@ export class FirebaseStore {
   }
   sendChat(text){return this.serialize(()=>this.performChat(text));}
   async performChat(text){
+    if(seasonClosed(this.world,this.now()))throw new GameError('종료된 시즌은 채팅할 수 없습니다.','SEASON_CLOSED');
     if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('종료된 시즌은 채팅할 수 없습니다.','SEASON_CLOSED');
     if(!canWrite(this))throw new GameError('전황과 채팅을 다시 확인한 뒤 보내 주세요.','OFFLINE');
     const name=this.world.players[this.uid]?.name||this.profileName;

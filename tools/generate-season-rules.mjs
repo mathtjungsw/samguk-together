@@ -1,8 +1,9 @@
 import fs from 'node:fs';
+import {cycleRules} from './season-cycle-rules.mjs';
 import {TEST_END,SEASON1_START} from '../src/seasons.js';
 import {RELEASE} from '../src/engine.js';
 import {MAP} from '../src/game-core.js';
-export function makeSeasonRules(end=TEST_END,start=SEASON1_START){
+function baseSeasonRules(end=TEST_END,start=SEASON1_START){
  const root=JSON.parse(fs.readFileSync('tests/fixtures/protocol4.rules.json','utf8'));
  const next=JSON.parse(fs.readFileSync('tests/fixtures/protocol5.rules.json','utf8'));
  const w=root.rules.worlds.$world,v5=next.rules.worlds.$world;
@@ -26,4 +27,5 @@ export function makeSeasonRules(end=TEST_END,start=SEASON1_START){
  old['.write']=`(${old['.write']})&&now<${end}`;chat['.write']=`(${chat['.write']})&&now>=${start}`;root.rules.chat['season-1']=chat;
  return root;
 }
-if(process.argv[1]?.endsWith('generate-season-rules.mjs')){fs.writeFileSync('firebase.database.rules.json',JSON.stringify(makeSeasonRules())+'\n');console.log('Season rules generated for v4 test season and v5 season 1.');}
+export function makeSeasonRules(end=TEST_END,start=SEASON1_START){const root=baseSeasonRules(end,start);return Date.now()>=end?cycleRules(root):root;}
+if(process.argv[1]?.endsWith('generate-season-rules.mjs')){fs.writeFileSync('firebase.database.rules.json',JSON.stringify(makeSeasonRules())+'\n');console.log('Season rules generated.');}

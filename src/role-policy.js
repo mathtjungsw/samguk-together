@@ -1,14 +1,13 @@
-import EFFECTS from './data/hero-effects.json' with {type:'json'};
+import {catalogEffect} from './hero-catalog.js';
 import {hash32,adjacent} from './game-core.js';
-const effects=new Map(EFFECTS.map(e=>[e.id,e]));
-const effect=u=>effects.get(u?.heroId);
+const effect=catalogEffect;
 export function officerOrder(seed,key='role') {
   return (a,b)=>b.sides-a.sides||(a.arrivedAt||0)-(b.arrivedAt||0)||(a.createdAt||0)-(b.createdAt||0)||hash32(`${seed}:${key}:${a.id}`)-hash32(`${seed}:${key}:${b.id}`)||a.id.localeCompare(b.id);
 }
 export function chooseOfficers(s,t,units,kind,at,limit=1){
   return units.filter(u=>{const e=effect(u);return e&&u.readyAt<=at&&(kind==='attack'||kind==='defense'?e.battle&&e[kind]:e[kind]);}).sort(officerOrder(s.seed,`${t.id}:${kind}`)).slice(0,limit);
 }
-export const hasSupport=t=>t.units.some(u=>[71,85].includes(effect(u)?.number));
+export const hasSupport=t=>t.units.some(u=>[71,85,142].includes(effect(u)?.number));
 export const hasGuard=t=>t.units.some(u=>effect(u)?.number===33);
 export function resolveRoles(s,t,at){
   const r=t.roles;

@@ -1,3 +1,4 @@
+import {warState,warLabel} from './war-map.js';
 import * as d3 from 'd3';
 import {MAP,COLORS,capacityOf} from './engine.js';
 import {softenPoint,sharedEdges,softenedLandPath} from './map-geometry.js';
@@ -7,7 +8,7 @@ export class TerritoryMap {
   constructor(container,onSelect,onCancel=()=>{}){
     this.container=container;this.onSelect=onSelect;this.svg=d3.select(container.querySelector('svg'));this.zoom=d3.zoomIdentity;this.world=null;this.uid=null;this.source=null;this.target=null;this.width=0;this.height=0;
     container.querySelector('.map-viewport').addEventListener('contextmenu',event=>{if(event.pointerType==='touch'||event.button!==2)return;event.preventDefault();onCancel();});
-    this.info='basic';this.highlight='';
+    this.mode='overview';this.info='basic';this.highlight='';
     this.layoutById=new Map(MAP.layout.cells.map(c=>[c.id,c]));
     this.land=structuredClone(MAP.land);if(d3.geoArea(this.land)>2*Math.PI)this.land.geometry.coordinates.forEach(p=>p.forEach(r=>r.reverse()));
     const saved=MAP.layout.projection;
@@ -43,8 +44,8 @@ export class TerritoryMap {
   setWorld(world,uid,source,target){this.world=world;this.uid=uid;this.source=source;this.target=target;this.paint();}
   paint(){
     if(!this.world||!this.regions)return;
-    const sourceTerritory=this.world.territories[this.source];const neighbors=new Set(sourceTerritory?.owner===this.uid?this.layoutById.get(this.source)?.neighbors:[]);
-    this.regions.attr('aria-label',p=>{const t=this.world.territories[p.id],owner=this.world.players[t.owner]?.name||'중립';return `${p.ko}, ${owner}, 병력 ${t.units.length}/${capacityOf(p.id,this.world)}명${neighbors.has(p.id)?', 인접 영토':''}`;}).classed('is-source',p=>p.id===this.source).classed('is-target',p=>p.id===this.target).classed('is-adjacent',p=>neighbors.has(p.id)).classed('is-dimmed',p=>!!this.highlight&&this.world.territories[p.id].owner!==this.highlight).classed('is-status',p=>{const t=this.world.territories[p.id];return t.owner===this.uid&&(this.info==='ready'?t.actionReadyAt<=(this.world.projectedAt||this.world.updatedAt):this.info==='full'?t.units.length>=capacityOf(t.id,this.world):false);});
+    const state=warState(this.world,this.uid,this.source);this.war=state;this.container.dataset.view=this.mode;const sourceTerritory=this.world.territories[this.source];const neighbors=new Set(sourceTerritory?.owner===this.uid?this.layoutById.get(this.source)?.neighbors:[]);
+    this.regions.attr('aria-label',p=>{const t=this.world.territories[p.id],owner=this.world.players[t.owner]?.name||'중립';return `${p.ko}, ${owner}, 병력 ${t.units.length}/${capacityOf(p.id,this.world)}명${neighbors.has(p.id)?', 인접 영토':''}`;}).classed('war-rear',p=>this.mode==='war'&&!state.focus.has(p.id)).classed('war-front',p=>this.mode==='war'&&state.front.has(p.id)).classed('war-open',p=>this.mode==='war'&&state.open.has(p.id)).classed('is-source',p=>p.id===this.source).classed('is-target',p=>p.id===this.target).classed('is-adjacent',p=>neighbors.has(p.id)).classed('is-dimmed',p=>!!this.highlight&&this.world.territories[p.id].owner!==this.highlight).classed('is-status',p=>{const t=this.world.territories[p.id];return t.owner===this.uid&&(this.info==='ready'?t.actionReadyAt<=(this.world.projectedAt||this.world.updatedAt):this.info==='full'?t.units.length>=capacityOf(t.id,this.world):false);});
     this.regions.select('path').attr('fill',p=>{const t=this.world.territories[p.id];return t.owner?d3.interpolateRgb('#e7e5d1',COLORS[this.world.players[t.owner]?.color||0])(.56):p.rank==='citadel'?'#e4d8bd':p.rank==='stronghold'?'#d9dfc8':'#e1e3d0';});this.labels();
   }
   viewState(){return this.ratio?{k:this.zoom.k,x:((this.width/2-this.zoom.x)/this.zoom.k-this.offset[0])/this.ratio,y:((this.height/2-this.zoom.y)/this.zoom.k-this.offset[1])/this.ratio}:null;}
@@ -60,18 +61,18 @@ export class TerritoryMap {
     const occupied=[],visible=[];
     for(const p of candidates){const [x,y]=p.screen,important=priority.has(p.id)||neighbors.has(p.id),eligible=important||p.major||k>1.7;
       if(!eligible||!important&&occupied.some(b=>x>b.x-13&&x<b.x+b.w+13&&y>b.y-13&&y<b.y+b.h+13))continue;
-      const count=this.world.territories[p.id].units.length,label=`${p.ko} ${count}`,w=p.ko.length*11+String(count).length*7+13;let position;
+      const count=this.world.territories[p.id].units.length,label=p.ko+" "+(this.mode==="war"?warLabel(this.world,this.uid,this.world.territories[p.id],this.world.projectedAt||this.world.updatedAt):count),w=label.length*8+13;let position;
       for(const dy of [-14,25]){const box={x:x-w/2,y:y+dy-12,w,h:16};if(box.x<3||box.x+box.w>width-3||box.y<3||box.y+box.h>height-3||occupied.some(b=>box.x<b.x+b.w+2&&box.x+box.w+2>b.x&&box.y<b.y+b.h+2&&box.y+box.h+2>b.y))continue;occupied.push(box);position={x,y:y+dy};break;}
       if(!position&&!important)continue;occupied.push({x:x-10,y:y-10,w:20,h:20});visible.push({...p,label,position});
     }
     const detailed=new Set(visible.map(p=>p.id));
     this.symbols.selectAll('circle.map-pin').data(candidates.filter(p=>!detailed.has(p.id)),p=>p.id).join('circle').attr('class','map-pin').attr('cx',p=>p.screen[0]).attr('cy',p=>p.screen[1]).attr('r',2);
     const nodes=this.symbols.selectAll('g.map-city').data(visible,p=>p.id).join(enter=>{const g=enter.append('g').attr('class','map-city');g.append('ellipse').attr('class','city-shadow').attr('cy',7).attr('rx',11).attr('ry',3);g.append('path').attr('class','city-wall');g.append('path').attr('class','city-roof');g.append('path').attr('class','city-door').attr('d','M-2 6V1Q0 -1 2 1V6Z');g.append('path').attr('class','city-flag');return g;});
-    nodes.attr('transform',p=>`translate(${p.screen})`).classed('capital',p=>p.rank==='citadel').classed('chosen',p=>priority.has(p.id));
+    nodes.attr('transform',p=>`translate(${p.screen})`).classed('capital',p=>p.rank==='citadel').classed('chosen',p=>priority.has(p.id)).classed('war-rear',p=>this.mode==='war'&&!this.war?.focus.has(p.id));
     nodes.select('.city-wall').attr('d',p=>p.rank==='normal'?'M-5 5V-2H5V5Z':'M-10 6V-2H-7V-6H-3V-2H3V-6H7V-2H10V6Z');
     nodes.select('.city-roof').attr('d',p=>p.rank==='normal'?'M-7 -2L0 -7L7 -2Z':'M-12 -2L-8 -7L-4 -2ZM-5 -6L0 -11L5 -6ZM4 -2L8 -7L12 -2Z').attr('fill',p=>{const t=this.world.territories[p.id];return t.owner?COLORS[this.world.players[t.owner]?.color||0]:p.rank==='citadel'?'#a77b45':'#54765b';});
     nodes.select('.city-flag').attr('d',p=>priority.has(p.id)?'M7 -5V-18L18 -15L7 -12':'');
-    this.labelLayer.selectAll('text').data(visible.filter(p=>p.position),p=>p.id).join('text').attr('class',p=>'map-place-label '+(priority.has(p.id)?'priority':'')).attr('x',p=>p.position.x).attr('y',p=>p.position.y).attr('text-anchor','middle').text(p=>(p.id===this.source?'출발 ':p.id===this.target?'목표 ':'')+p.label);
-    this.container.querySelector('[data-map-zoom]').textContent=Math.round(k*100)+'%';
+    this.labelLayer.selectAll('text').data(visible.filter(p=>p.position),p=>p.id).join('text').attr('class',p=>'map-place-label '+(priority.has(p.id)?'priority':'')).attr('x',p=>p.position.x).attr('y',p=>p.position.y).attr('text-anchor','middle').classed('war-rear',p=>this.mode==='war'&&!this.war?.focus.has(p.id)).text(p=>(p.id===this.source?'출발 ':p.id===this.target?'목표 ':'')+p.label);
+    const points=[this.source,this.target].map(id=>this.cells.find(p=>p.id===id)).filter(Boolean).map(screen);this.labelLayer.selectAll('path.war-arrow').data(this.mode==='war'&&points.length===2&&neighbors.has(this.target)?[points]:[]).join('path').attr('class','war-arrow').attr('d',p=>'M'+p[0]+' L'+p[1]).attr('marker-end','url(#attack-head)');if(!this.svg.select('#attack-head').size())this.svg.select('defs').append('marker').attr('id','attack-head').attr('viewBox','0 0 10 10').attr('refX',12).attr('refY',5).attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto').append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#b3513e');this.container.querySelector('[data-map-zoom]').textContent=Math.round(k*100)+'%';
   }
 }

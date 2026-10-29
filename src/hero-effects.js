@@ -1,3 +1,4 @@
+import {catalogEffect} from './hero-catalog.js';
 import {baseCapacity as v5Capacity} from './combat-policy.js';
 import {battleCondition} from './effect-preview.js';
 import {chooseOfficers} from './role-policy.js';
@@ -6,7 +7,7 @@ import {MINUTE,RULES,baseCapacity,placeInfo,adjacent,ownedTerritories,seededRand
 export {EFFECTS};
 export const heroByName=new Map(EFFECTS.map(e=>[e.name,e]));
 export const heroById=new Map(EFFECTS.map(e=>[e.id,e]));
-export const effectOf=u=>u?.heroId?heroById.get(u.heroId):undefined;
+export const effectOf=u=>catalogEffect(u);
 export const effectNumber=u=>effectOf(u)?.number||0;
 export const newEffectState=()=>({recruits:0,attacks:0,wins:0,escapes:0,lastProcAt:0,hasProc:false,firstGift:false,lastAttackAt:0,lastAttackWon:false,captured:{},defended:{},capacityStamp:0});
 export function stateOf(u){return u.effectState??=newEffectState();}
@@ -167,7 +168,7 @@ export function moveTiming(s,a,b,units,at,officerId,returning=[]){
 
 export function effectStatus(u,at){
   const e=effectOf(u);if(!e)return u.sides===20?'플레이어 군주 · D20':u.legacy?'기존 동급 병력 · 고유 효과 없음':'일반 병사';
-  const st=u.effectState||newEffectState();let text='';
+  const st=u.effectState||newEffectState();let text='';if(u.heroVersion===2){if([6,40,77,50,147].includes(e.number))return '탈출 성공 '+st.escapes+' / '+(e.number===6?2:1)+'회 사용';if([57,59,80,84].includes(e.number)&&st.hasProc)return '다음 발동 '+Math.max(0,Math.ceil((st.lastProcAt+60*MINUTE-at)/MINUTE))+'분';}
   if([6,40,77].includes(e.number))text=`탈출 ${Math.max(0,(e.number===6?2:1)-st.escapes)}회 남음`;
   if(e.number===50)text=`50% 탈출 · 성공 ${Math.max(0,2-st.escapes)}회 남음`;
   if([11,27,33].includes(e.number))text='생애 1회 희생 호위';
