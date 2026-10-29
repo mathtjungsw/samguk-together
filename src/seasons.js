@@ -19,4 +19,5 @@ export function archiveTestSeason(raw){
 export function archiveMapWorld(archive){return {featureVersion:archive.featureVersion,updatedAt:archive.endedAt,players:Object.fromEntries(archive.rankings.map(p=>[p.id,{...p,uid:p.id}])),territories:Object.fromEntries(archive.territories.map(t=>[t.id,{id:t.id,owner:t.owner,roles:{},units:Array.from({length:t.army},(_,i)=>({id:`archive-${t.id}-${i}`,sides:4}))}]))};}
 
 export function createSeasonWorld(number,startAt,seed){const s=NEXT.createWorld(startAt,seed);s.season={id:'season-'+number,number,startAt,deadline:startAt+SEASON_MS};return s;}
-export function followingSeason(s,now){if(!s.season?.endedAt||now<s.season.nextStartAt)return null;const skipped=Math.floor((now-s.season.nextStartAt)/(SEASON_MS+BREAK_MS));return {number:s.season.number+1,startAt:s.season.nextStartAt+skipped*(SEASON_MS+BREAK_MS)};}
+export function nextSeasonAt(s,now){const first=s.season?.nextStartAt;if(!first||now<first)return first||0;const cycle=SEASON_MS+BREAK_MS,startAt=first+Math.floor((now-first)/cycle)*cycle;return now>=startAt+SEASON_MS?startAt+cycle:startAt;}
+export function followingSeason(s,now){if(!s.season?.endedAt)return null;const startAt=nextSeasonAt(s,now);if(now<startAt)return null;return {number:s.season.number+1,startAt};}

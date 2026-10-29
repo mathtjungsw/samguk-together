@@ -4,7 +4,7 @@ import {rosterFor} from './hero-catalog.js';
 import {seasonClosed,seasonVictory,conquestTarget} from './season-policy.js';
 import {probabilityText,cityListHTML,historyHTML,historyRows,eventText,FieldMemory,filterChat,canWrite,battleRecord} from './field-ui.js';
 import {officerReadinessHTML,infantryScheduleHTML} from './readiness.js';
-import {TEST_END,SEASON1_START,seasonPhase,activeWorld,worldWritable,seasonMessage,archiveTestSeason,archiveMapWorld} from './seasons.js';
+import {TEST_END,SEASON1_START,seasonPhase,activeWorld,worldWritable,seasonMessage,archiveTestSeason,archiveMapWorld,nextSeasonAt} from './seasons.js';
 import {chooseOfficers} from './role-policy.js';
 import CONFIG from '../firebase-config.json' with {type:'json'};
 import {MAP,RULES,RANKS,TIERS,COLORS,createWorld,projectWorld,placeInfo,adjacent,capacityOf,ownedTerritories,readyUnits,clockText,nextRecruitAt,restartAvailableAt,validateMove,winProbability,casualtyCount,chatMessages,hasDueRecruitment,leaderboard,validateRevival,RELEASE,livingUnits,queuedUnits,movementPlan,visibleHistory,maximumMove,myPendingBattle,isLocked,retreatPlan} from './engine.js';
@@ -254,7 +254,7 @@ function syncSeasonUI(){
   const now=currentTime(),x=world.season,banner=$('season-banner');if(!x){banner.hidden=true;return;}
   document.body.classList.toggle('is-ended',!!x.endedAt);banner.hidden=false;
   const atText=at=>new Date(at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  if(x.endedAt){const victory=seasonVictory(world);banner.textContent=victory.title+' · 다음 시즌 '+atText(x.nextStartAt)+' 개막 · '+clockText(x.nextStartAt-now);banner.onclick=()=>showVictory();if(victorySeen!==x.id&&!busy&&modalKind!=='battle'&&modalKind!=='guard'){victorySeen=x.id;showVictory();}if(now>=x.nextStartAt&&store?.mode==='online'&&!seasonSwitching&&Date.now()>seasonPollAt){seasonSwitching=true;seasonPollAt=Date.now()+15000;source=null;target=null;selected.clear();closeModal();googleLogin(true).finally(()=>seasonSwitching=false);}}
+  if(x.endedAt){const opening=nextSeasonAt(world,now),victory=seasonVictory(world);banner.textContent=victory.title+' · 다음 시즌 '+atText(opening)+' 개막 · '+clockText(opening-now);banner.onclick=()=>showVictory();if(victorySeen!==x.id&&!busy&&modalKind!=='battle'&&modalKind!=='guard'){victorySeen=x.id;showVictory();}if(now>=opening&&store?.mode==='online'&&!seasonSwitching&&Date.now()>seasonPollAt){seasonSwitching=true;seasonPollAt=Date.now()+15000;source=null;target=null;selected.clear();closeModal();googleLogin(true).finally(()=>seasonSwitching=false);}}
   else{banner.onclick=null;banner.textContent='시즌 '+x.number+' · 전체90곳 중72곳 점령 시 우승'+(x.deadline?' · 마감 '+atText(x.deadline)+' · 남은 '+clockText(x.deadline-now):' · 현재 시즌은 시간 제한 없이 진행');}
 }
 function showVictory(){const v=seasonVictory(world);if(!v)return;const x=world.season;openModal('<div class="season-victory"><p class="eyebrow">삼국지 지난 역사 · 시즌 '+x.number+'</p><h2>'+esc(v.title)+'</h2><p>'+esc(v.text)+'</p><p>'+esc(x.reason==='conquest'?'패권 기준80% 달성':'72시간 쟁패 종료')+' · 전체90영토</p><p>다음 시즌: '+new Date(x.nextStartAt).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})+'</p><button data-season-results>최종 지도·랭킹</button><button data-close>전장 보기</button></div>','victory');}
