@@ -1,7 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {historyFeed} from '../src/world-data.js';
 import {normalizeWorld} from '../src/engine-next.js';
-import {aiCostGate,canActivateAi} from '../src/ai-runtime.js';
 import {castAiBallot,aiElectors,aiStartCount,validateAiState} from '../src/ai-world.js';
 
 // Separate future AI-season storage: transactions exclude old dice/army copies.
@@ -18,8 +17,7 @@ export class AiStateStore {
     return this.kv.transact(this.path,current=>current?undefined:{envelope:{...envelope,ops}});
   }
   async approveActivation(metrics){
-    if(!canActivateAi(metrics,this.now()).allowed)throw Error('활동일 실측과 전체 비용 검토에서 무료량 여유가 확인되지 않았습니다.');
-    return this.kv.transact(this.path+'/envelope/ops',old=>({...old,cost:metrics,enabled:true,activationApproved:true}));
+    return this.kv.transact(this.path+'/envelope/ops',old=>({...old,cost:metrics||null,enabled:true,activationApproved:true}));
   }
   async recover(){
     const outbox=await this.kv.read(this.path+'/envelope/outbox');if(!outbox)return 0;
@@ -73,7 +71,7 @@ export class AiStateStore {
     const next=aiEnvelope(world);
     const result=await this.kv.transact(this.path+'/envelope',current=>{
       if(!current||current.world.revision!==expectedRevision||current.lease?.token!==lease.token||current.lease?.generation!==lease.generation||current.lease.until<=this.now())return;
-      if(!current.ops?.enabled||!current.ops.activationApproved||['paused','hold'].includes(aiCostGate(current.ops.cost,this.now()).mode))return;
+      if(!current.ops?.enabled||!current.ops.activationApproved)return;
       if(world.revision!==expectedRevision+1||world.ai.lastTick!==round||lease.round!==round)throw Error('AI 원자 명령의 회차·revision이 일치하지 않습니다.');
       const outbox={...current.outbox};
       for(const [id,e]of Object.entries(world.history||{}))if(!current.history?.[id])outbox[id]={kind:'record',event:e};

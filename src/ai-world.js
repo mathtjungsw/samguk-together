@@ -9,7 +9,7 @@ export const isAi=p=>p?.kind==='ai';
 export function validateAiState(s){
   const a=s.ai;if(!a)return s;
   requireGame(a.version===1&&typeof a.enabled==='boolean'&&Number.isInteger(a.startCount)&&a.startCount>=1&&a.startCount<=5&&Number.isInteger(a.nextSerial)&&a.nextSerial>=1&&Number.isInteger(a.spawnRound)&&a.spawnRound>=0&&Number.isInteger(a.lastTick)&&a.lastTick>=-1,'AI 운영 기록 버전을 확인해 주세요.','CORRUPT');
-  for(const p of Object.values(s.players).filter(isAi)){const x=p.ai;requireGame(x?.version===1&&Number.isFinite(x.bornAt)&&Number.isInteger(x.lastRound)&&x.lastRound>=-1&&Number.isFinite(x.nextDecisionAt)&&Number.isInteger(x.idleRounds)&&x.idleRounds>=0&&x.moves&&typeof x.moves==='object','AI 군주 판단 기록이 손상되었습니다.','CORRUPT');}
+  for(const p of Object.values(s.players).filter(isAi)){const x=p.ai;if(x)x.moves??={};requireGame(x?.version===1&&Number.isFinite(x.bornAt)&&Number.isInteger(x.lastRound)&&x.lastRound>=-1&&Number.isFinite(x.nextDecisionAt)&&Number.isInteger(x.idleRounds)&&x.idleRounds>=0&&x.moves&&typeof x.moves==='object','AI 군주 판단 기록이 손상되었습니다.','CORRUPT');}
   return s;
 }
 export function aiElectors(s){

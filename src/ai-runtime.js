@@ -49,17 +49,18 @@ export function runAiRound(raw,at,{seedFor,plannerOptions={},maxDecisionMs=40_00
   refreshIndexes(s);return {world:normalizeWorld(s),actions,reason:s.season.endedAt?'season-ended':'processed',elapsedMs:clock()-started};
 }
 
+// Cost diagnostics are advisory; explicit enable/disable controls execution.
 export function aiCostGate(metrics,now,{freeBytes=360_000_000,staleMs=6*3600_000}={}){
-  if(!metrics||!Number.isFinite(metrics.observedAt)||metrics.observedAt>now||now-metrics.observedAt>staleMs)return {mode:'paused',reason:'사용량 측정 누락·지연'};
+  if(!metrics||!Number.isFinite(metrics.observedAt)||metrics.observedAt>now||now-metrics.observedAt>staleMs)return {mode:'unknown',reason:'사용량 측정 누락·지연'};
   const keys=['actualBytes','forecastHumanBytes','forecastAiBytes','forecastOverheadBytes','otherCost'];
-  if(keys.some(k=>!Number.isFinite(metrics[k])||metrics[k]<0)||metrics.otherCost>0)return {mode:'paused',reason:'비용 추정 불확실 또는 실제 청구 감지'};
+  if(keys.some(k=>!Number.isFinite(metrics[k])||metrics[k]<0)||metrics.otherCost>0)return {mode:'unknown',reason:'비용 추정 불확실 또는 실제 청구 감지'};
   const ratio=Math.max(metrics.actualBytes,metrics.forecastHumanBytes+metrics.forecastAiBytes+metrics.forecastOverheadBytes)/freeBytes;
-  if(ratio>=.85)return {mode:'paused',ratio,reason:'무료량 85% 이상 예상'};
-  if(ratio>=.75)return {mode:'hold',ratio,reason:'무료량 75% 이상 예상·새 AI 작업 보류'};
+  if(ratio>=.85)return {mode:'high',ratio,reason:'무료량 85% 이상 예상 · 비용 발생 가능성 안내'};
+  if(ratio>=.75)return {mode:'high',ratio,reason:'무료량 75% 이상 예상 · 비용 발생 가능성 안내'};
   if(ratio>=.6)return {mode:'warning',ratio,reason:'무료량 60% 접근'};
   return {mode:'normal',ratio,reason:'측정치 기준 여유'};
 }
-export function canActivateAi(metrics,now){const gate=aiCostGate(metrics,now);return {allowed:['normal','warning'].includes(gate.mode)&&gate.ratio<=.7&&metrics.representativeDays>=1&&metrics.allServicesReviewed===true,gate};}
+export function canActivateAi(metrics,now){return {allowed:true,gate:aiCostGate(metrics,now)};}
 
 export async function executeAiTick(adapter,{now,seedFor,plannerOptions={},clock=()=>performance.now(),maxDecisionMs=40_000}={}){
   requireGame(Number.isFinite(now),'AI 실행 시각이 올바르지 않습니다.');const began=clock();
@@ -67,7 +68,7 @@ export async function executeAiTick(adapter,{now,seedFor,plannerOptions={},clock
   // No implementation here silently falls back to a blind Admin update().
   const meta=await adapter.readMeta();
   if(!meta?.activationApproved||!meta?.enabled)return {status:'disabled',reads:0};
-  const gate=aiCostGate(meta.cost,now),notice={...gate,periodId:meta.cost?.periodId||'unverified'};if(gate.mode==='warning')await adapter.reportGate(notice);if(['paused','hold'].includes(gate.mode)){await adapter.reportGate(notice);return {status:'cost-paused',gate,reads:0};}
+  const gate=aiCostGate(meta.cost,now),notice={...gate,periodId:meta.cost?.periodId||'unverified'};if(gate.mode!=='normal'){try{await adapter.reportGate(notice);}catch{/* Cost reporting must not suspend authorized gameplay. */}}
   const round=Math.floor((now-meta.startAt)/AI_POLICY.decisionMs);
   if(meta.endedAt||round<0||meta.lastTick>=round)return {status:'not-due',reads:0};
   const lease=await adapter.acquire(round,now);if(!lease)return {status:'busy',reads:0};
