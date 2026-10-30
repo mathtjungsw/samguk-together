@@ -14,3 +14,10 @@
 단위280개·빌드를 통과했다. 운영 함수의 OPTIONS204/CORS 응답과 비로그인 POST401/UNAUTHENTICATED 응답을 확인했다. Google 로그인한 우승자의 실제 저장 화면은 자동 검사 범위와 구분한다. 사이트 배포 후 공지와 최종 결과를 아래에 추가한다.
 
 초기 배포 실패 후 재배포가 update 경로로 진행되면서 callable의 Cloud Run invoker가 비어 있었다. 현재 Firebase CLI의 callable update 경로는 invoker를 복구하지 않아 코드의 public 설정만으로 해결되지 않았다. 해당 선택 함수에만 roles/run.invoker의 allUsers를 적용했고, 이후 함수 배포에도 같은 설정을 검증·유지하는 postdeploy 스크립트를 추가했다. 데이터 읽기·저장 권한은 Google 로그인·우승자·시간 검증으로 계속 제한한다.
+
+## 배포 완료
+
+- 수정 사이트 배포 [41062071089](https://github.com/mathtjungsw/samguk-together/actions/runs/41062071089) 성공: 단위280개·Firebase85개·빌드·Pages 모두 통과.
+- 실제 배포 자산 `app.js?v=9039ac1e4524`의 선택·로딩·재시도 코드를 확인했다. 운영 callable의 CORS204 및 로그인 없는401 거부도 확인했다.
+- 시즌3 revision2593에 수정 공지·release·전황 요약·전체 채팅을 게시했다. 시즌 결과·영토·병력·참가자 자료는 그대로 보존했다.
+- 로컬 브라우저 사용이 Work 설정에서 비활성화되어 우승자 로그인 화면을 직접 조작하지 못했다. 실제 우승자의 선택값을 대신 입력하거나 임의로 변경하지 않았다.
