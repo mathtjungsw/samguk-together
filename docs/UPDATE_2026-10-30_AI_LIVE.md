@@ -38,3 +38,7 @@ Firebase Functions Node22, asia-southeast1, 예약10분, 최소 인스턴스0/�
 
 - GitHub Actions [41035980414](https://github.com/mathtjungsw/samguk-together/actions/runs/41035980414): 단위277개·Firebase85개·빌드·Pages 배포 모두 성공. 운영 `app.js?v=a78bd33f864c`에서 새 release ID와 우승자 선택 호출이 실제 제공되는 것을 확인했다.
 - 최종 배포 커밋 `a48bf6a`. [운영 게임](https://mathtjungsw.github.io/samguk-together/)을 새로고침하면 새 화면을 받는다. 브라우저 직접 화면 검증의 한계는 위와 같으며 실제 화면을 확인했다고 주장하지 않는다.
+
+### 시작 배치 시점 사용자 재확인 (2026-10-30 23시)
+
+시즌4 시작 직후 미표시는 다음10분 예약 실행까지의 시차였다. 운영 메타데이터에서23:10 시작 수3명·nextSerial4를 확인했다. 사용자가 현재 방식을 유지한다고 결정하여 즉시 배치 이벤트 추가 작업을 취소했다. 준비 중이던 로컬 변경은 되돌렸고 서버 소스 업로드 전 배포 프로세스를 중단했다. 다음 시즌도 개막 후 첫10분 예약 실행에서 시작 군주를 배치한다.
