@@ -35,7 +35,7 @@ function stamp(at){return new Date(at).toLocaleTimeString('ko-KR',{hour:'2-digit
 let guardScreenId='',guardSelected='';
 function syncGuardModal(){
   const p=uid?myPendingBattle(world,uid):null;
-  if(!p){if(modalKind==='guard'){const id=guardScreenId;guardScreenId='';$('modal').close();modalKind='';const result=world.history[id]?.result;if(result)showBattle(result);}return;}
+  if(!p){if(modalKind==='guard'){const id=guardScreenId;guardScreenId='';$('modal').close();modalKind='';const result=world.history[id]?.result;if(result)showBattle(result);else if(store?.battleDetail)store.battleDetail(id).then(e=>{if(!myPendingBattle(world,uid))showBattle(battleRecord(e.result));}).catch(e=>toast(e.message));}return;}
   const seconds=Math.max(0,Math.ceil((p.deadline-currentTime())/1000));
   if(modalKind==='guard'&&guardScreenId===p.id){const counter=$('guard-count');if(counter)counter.textContent=String(seconds);document.querySelectorAll('[data-guard-confirm],[data-guard-none]').forEach(el=>el.disabled=busy||seconds===0);return;}
   guardScreenId=p.id;guardSelected=p.defaultTarget;
@@ -207,7 +207,7 @@ function fieldPanels(){
 function openMyNews(){sideTab='history';newsFilter.scope='mine';lastInfoSignature='';render();}
 function readVisibleNews(){if(document.hidden)return;const es=[...document.querySelectorAll('[data-news-id]')].filter(el=>{const r=el.getBoundingClientRect(),host=el.closest('.command-scroll,.modal-inner')?.getBoundingClientRect();return r.width&&r.height&&r.bottom>Math.max(0,host?.top||0)&&r.top<Math.min(innerHeight,host?.bottom||innerHeight);}).map(el=>world.history[el.dataset.newsId]).filter(Boolean);if(es.length)fieldMemory?.readNews(world,es);}
 function readNews(){fieldScope()?.readNews(world,historyRows(world,uid,newsFilter));$('return-news').hidden=true;}
-function replayBattle(id){if(myPendingBattle(world,uid)){toast('관평의 구조 선택을 먼저 마쳐 주세요.');return;}const e=world.history[id];if(!e?.result||!Array.isArray(e.result.attack)||!Array.isArray(e.result.defend)){toast('상세 기록이 없습니다.');return;}showBattle(structuredClone(e.result),{replay:true,at:e.at,text:e.text});}
+async function replayBattle(id){if(myPendingBattle(world,uid)){toast('관평의 구조 선택을 먼저 마쳐 주세요.');return;}const season=store?.config?.worldId;try{let e=world.history[id];if(!e?.result&&store?.battleDetail){toast('이 전투의 상세 기록을 불러옵니다.');e=await store.battleDetail(id);}if(season!==store?.config?.worldId||myPendingBattle(world,uid))return;if(!e?.result){toast('상세 기록이 없습니다.');return;}showBattle(battleRecord(e.result),{replay:true,at:e.at,text:e.text});}catch(error){toast(error.message||'전투 기록을 불러오지 못했습니다.');}}
 function battleOutcome(r){if(r.score===r.defense)return '동점 · 수비군 승리';if(uid===r.attacker)return r.won?'공격 승리 · 영토 점령':'공격 패배';if(uid===r.defender)return r.won?'수비 실패':'수비 성공';return r.won?'공격군 승리':'수비군 승리';}
 function chatFiltersHTML(){return [['all','모두'],['talk','대화'],['system','공지']].map(([v,l])=>`<button data-chat-filter="${v}" aria-pressed="${chatFilter===v}">${l}</button>`).join('');}
 function visibleChat(){return filterChat(publicChat(chatMessages(chat)),chatFilter);}

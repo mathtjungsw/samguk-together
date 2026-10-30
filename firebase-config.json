@@ -10,5 +10,6 @@
     "messagingSenderId": "657800626120",
     "appId": "1:657800626120:web:59e38680fe0e6f8121cafd"
   },
-  "emulators": false
+  "emulators": false,
+  "compactSync": true
 }

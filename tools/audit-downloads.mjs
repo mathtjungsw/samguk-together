@@ -1,0 +1,5 @@
+import {readFile,writeFile} from 'node:fs/promises';import {historyFeed,WORLD_FIELDS} from '../src/world-data.js';
+const path=process.argv[2];if(!path)throw Error('Usage: node tools/audit-downloads.mjs <private-backup.json> [report.json]');
+const root=JSON.parse((await readFile(path,'utf8')).replace(/^\uFEFF/,'')),worlds=root.worlds||{world:root},bytes=v=>Buffer.byteLength(JSON.stringify(v));
+const report={measuredAt:new Date().toISOString(),scope:'UTF-8 JSON payload estimate; not wire traffic or billed usage',worlds:Object.entries(worlds).map(([id,s])=>{const original=bytes(s),core=Object.fromEntries(WORLD_FIELDS.filter(k=>k in s).map(k=>[k,s[k]])),feed=historyFeed(s),lean=bytes(core)+bytes(feed);return {world:id,originalBytes:original,coreBytes:bytes(core),feedBytes:bytes(feed),firstLoadBytes:lean,reductionPercent:Number((100*(1-lean/original)).toFixed(1)),fullDailyMB:Number((original*144/1e6).toFixed(2)),compactDailyMB:Number((lean*144/1e6).toFixed(2)),events:Object.keys(s.history||{}).length};})};
+if(process.argv[3])await writeFile(process.argv[3],JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));
