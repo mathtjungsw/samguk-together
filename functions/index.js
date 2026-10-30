@@ -42,7 +42,7 @@ async function loggedTick(){const result=await tick();console.log('ai-ruler',JSO
 export const aiRulerTick=onSchedule({...settings,schedule:'every 10 minutes',timeZone:'Asia/Seoul',retryCount:0},loggedTick);
 export const aiRulerActivation=onValueWritten({...settings,ref:'/aiOperations/enabled',instance:'samguk-together-default-rtdb'},async event=>{if(event.data.after.val()===true)return loggedTick();});
 export const aiRulerAdmin=onCall(settings,async request=>{if(!request.auth||request.auth.token.email!==process.env.AI_ADMIN_EMAIL)throw new HttpsError('permission-denied','운영자만 실행할 수 있습니다.');return tick();});
-export const aiRulerChoice=onCall(settings,async request=>{
+export const aiRulerChoice=onCall({...settings,invoker:'public'},async request=>{
  if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');
  const id=request.data?.worldId;if(!/^season-[1-9][0-9]*$/.test(id||''))throw new HttpsError('invalid-argument','시즌 번호를 확인해 주세요.');
  const season=(await db.ref('worlds/'+id+'/season').get()).val(),players=(await db.ref('worlds/'+id+'/players').get()).val()||{},world={season,players,territories:{}},uid=request.auth.uid,at=Date.now(),ref=db.ref('aiOperations/ballots/'+id);
