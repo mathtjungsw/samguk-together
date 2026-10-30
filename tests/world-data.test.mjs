@@ -22,6 +22,15 @@ test('legacy revision gap reads full history rather than losing records',async()
  const s=await new WorldReader(sdk,null,'s').read();assert.equal(s.history.old.text,'보존');assert.equal(reads.filter(p=>p==='worlds/s/history').length,1);
 });
 
+test('initial read and realtime start share the same three subscriptions',async()=>{
+ const f=fixture(),root={worlds:{s:f.s},historyFeed:{s:historyFeed(f.s)}},reads=[],sdk=mockSdk(root,reads),watched=[];sdk.onValue=(q,callback)=>{watched.push(q);Promise.resolve().then(async()=>callback(await sdk.get(q)));return ()=>{};};
+ const reader=new WorldReader(sdk,null,'s');try{await reader.read();reader.start();await reader.read();assert.equal(watched.length,3);assert.equal(reads.filter(p=>p.endsWith(':query')).length,2);assert.equal(reads.filter(p=>p==='historyFeed/s').length,1);}finally{reader.close();}
+});
+
+test('a feed frame arriving after the core does not trigger a full legacy history read',async()=>{
+ const reader=new WorldReader({},null,'s');reader.raw={revision:2,updatedAt:2,command:{baseRevision:1,at:2}};reader.feed={revision:1,events:{}};reader.ready=new Set(['before','after','feed']);reader.started=true;let delivered=0;reader.onWorld=()=>delivered++;reader.readHistory=()=>assert.fail('matching feed is still in flight');try{await reader.flush();assert.equal(delivered,0);reader.feed={revision:2,events:{}};await reader.flush();assert.equal(delivered,1);assert.equal(reader.fallbacks,0);}finally{reader.close();}
+});
+
 test('season discovery reads only closed metadata and preserves the chosen ruler name',async()=>{
  const now=Date.now(),root={worlds:{'season-2':{season:{number:2,endedAt:now-7200000,nextStartAt:now-3600000,result:{id:'season-2',title:'시즌2',endedAt:now-7200000}},players:{a:{name:'이어갈 이름',nameChosen:true}},history:{huge:'must not load'}},'season-3':{revision:4,history:{huge:'must not load'}}}},reads=[];
  const sdk=mockSdk(root,reads);sdk.set=async()=>{};sdk.runTransaction=async()=>assert.fail('existing season must not trigger a broad transaction');const store=new FirebaseStore({compactSync:true,worldId:'season-2'});Object.assign(store,{sdk,db:null,uid:'a',now:()=>now});
