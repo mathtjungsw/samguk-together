@@ -1,6 +1,6 @@
 // Inactive presentation seam; app.js does not import it until the server is ready.
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const aiName=p=>`${p?.kind==='ai'?'[AI] ':''}${p?.name||'군주'}`;
+export const aiName=p=>p?.name||'군주';
 export function aiChoiceHTML(view,{busy=false}={}){
   if(!view)return '';
   const status=view.open?(view.eligible?'다음 시즌에 함께할 AI 군주 수를 정하세요.':'우승 군주가 다음 시즌 AI 수를 정하고 있습니다.'):'다음 시즌 시작 AI 수가 확정되었습니다.';

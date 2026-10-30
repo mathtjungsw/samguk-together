@@ -9,7 +9,7 @@ export const isAi=p=>p?.kind==='ai';
 export function validateAiState(s){
   const a=s.ai;if(!a)return s;
   requireGame(a.version===1&&typeof a.enabled==='boolean'&&Number.isInteger(a.startCount)&&a.startCount>=1&&a.startCount<=5&&Number.isInteger(a.nextSerial)&&a.nextSerial>=1&&Number.isInteger(a.spawnRound)&&a.spawnRound>=0&&Number.isInteger(a.lastTick)&&a.lastTick>=-1,'AI 운영 기록 버전을 확인해 주세요.','CORRUPT');
-  for(const p of Object.values(s.players).filter(isAi)){const x=p.ai;if(x)x.moves??={};requireGame(x?.version===1&&Number.isFinite(x.bornAt)&&Number.isInteger(x.lastRound)&&x.lastRound>=-1&&Number.isFinite(x.nextDecisionAt)&&Number.isInteger(x.idleRounds)&&x.idleRounds>=0&&x.moves&&typeof x.moves==='object','AI 군주 판단 기록이 손상되었습니다.','CORRUPT');}
+  for(const p of Object.values(s.players).filter(isAi)){if(typeof p.ai==='string'){try{p.ai=JSON.parse(p.ai);}catch{requireGame(false,'AI 판단 기록을 읽을 수 없습니다.','CORRUPT');}}const x=p.ai;if(x)x.moves??={};requireGame(x?.version===1&&Number.isFinite(x.bornAt)&&Number.isInteger(x.lastRound)&&x.lastRound>=-1&&Number.isFinite(x.nextDecisionAt)&&Number.isInteger(x.idleRounds)&&x.idleRounds>=0&&x.moves&&typeof x.moves==='object','AI 군주 판단 기록이 손상되었습니다.','CORRUPT');}
   return s;
 }
 export function aiElectors(s){
@@ -32,24 +32,42 @@ export function castAiBallot(previous,ballots,uid,count,at){
 const ordered=(s,key,items)=>items.slice().sort((a,b)=>hash32(`${s.seed}:${key}:${a.id}`)-hash32(`${s.seed}:${key}:${b.id}`)||a.id.localeCompare(b.id));
 function addHistory(s,id,at,fields){s.history[id]={id,at,actor:'ai-system',...fields};s.history=Object.fromEntries(Object.entries(s.history).sort((a,b)=>b[1].at-a[1].at||b[0].localeCompare(a[0])).slice(0,100));}
 function checkpoint(s,before,at,id){s.revision=before+1;s.updatedAt=at;s.command={...s.command,id,type:'aiBatch',actor:'ai-system',at,baseRevision:before,protocol:6};reconcileRoles(s,at);refreshIndexes(s);return normalizeWorld(s);}
+export function previousRulerNames(archives){return [...new Set(archives.flatMap(a=>Object.values(a?.rankings||{}).map(p=>String(p.name||'').trim().slice(0,16))).filter(Boolean))];}
+function rulerName(s,n){const used=new Set(Object.values(s.players).map(p=>p.name)),pool=typeof s.ai.namePool==='string'?JSON.parse(s.ai.namePool):(s.ai.namePool||[]),available=pool.filter(name=>!used.has(name));if(available.length)return ordered(s,'name:'+n,available.map(name=>({id:name})))[0].id;const base=pool[(n-1)%Math.max(1,pool.length)]||'옛 군주';let name=base;for(let i=2;used.has(name);i++)name=base.slice(0,12)+' '+i;return name;}
 function createAi(s,t,at,infantry,origin=''){
-  const n=s.ai.nextSerial++,uid=`ai-s${s.season.number}-${String(n).padStart(3,'0')}`,name=`AI 군주 ${String(n).padStart(3,'0')}`;
+  const n=s.ai.nextSerial++,uid=`ai-s${s.season.number}-${String(n).padStart(3,'0')}`,name=rulerName(s,n);
   requireGame(!s.players[uid],'AI 군주 번호가 이미 사용 중입니다. 기존 군주를 보존했습니다.','CORRUPT');
   s.players[uid]={uid,name,kind:'ai',nameChosen:true,color:Object.keys(s.players).length%15,joinedAt:at,life:1,eliminatedAt:0,startedAt:at,captures:0,defeats:0,kills:0,deaths:0,revived:0,exchanged:0,rulerId:'',retreatCostD4:0,ai:{version:1,bornAt:at,origin,lastRound:-1,nextDecisionAt:at+RULES.protectionMs,idleRounds:0,moves:{}}};
   t.owner=uid;t.generation++;t.revision++;t.roles=emptyRoles();t.protectionUntil=at+RULES.protectionMs;t.actionReadyAt=at+RULES.actionMs;t.lastRecruitAt=at;t.nextRecruitAt=at+RULES.recruitMs;t.cycleMs=RULES.recruitMs;t.lastAttackAt=0;t.battleLock='';
   t.units=[20,...Array(infantry).fill(4)].map((sides,i)=>stampUnit({id:`${uid}:initial:${i}`,name:sides===20?name:'병사',sides,readyAt:at+RULES.actionMs,moveReadyAt:at+RULES.actionMs},at,t.id));
   return uid;
 }
-export function initializeAiWorld(raw,count=3){
+export function initializeAiWorld(raw,count=3,names=[]){
   requireGame(Number.isInteger(count)&&count>=1&&count<=5,'시작 AI 수는 1~5명입니다.');
   const s=normalizeWorld(raw);if(s.ai?.version===1){requireGame(s.ai.startCount===count,'이미 준비된 AI 수와 다릅니다.');return s;}
   requireGame(s.featureVersion===6&&s.season&&!s.season.endedAt,'AI를 준비할 새 시즌이 필요합니다.');
   requireGame(!Object.keys(s.players).length&&!Object.values(s.territories).some(t=>t.owner),'진행 중인 시즌에는 시작 AI를 주입하지 않습니다.');
-  const at=s.season.startAt,revision=s.revision;s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnRound:0,lastTick:-1};
+  const at=s.season.startAt,revision=s.revision;s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnRound:0,lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
   const candidates=ordered(s,'ai-start',Object.values(s.territories));
   for(const t of candidates.slice(0,count))createAi(s,t,at,4);
-  addHistory(s,`ai-start-s${s.season.number}`,at,{type:'ai',text:`이번 시즌은 AI 군주 ${count}명과 함께 시작합니다.`});
+  addHistory(s,`ai-start-s${s.season.number}`,at,{type:'ai',text:`지난 군웅 ${count}명이 새 강토에서 깃발을 올렸습니다.`});
   return validateAiState(checkpoint(s,revision,at,`ai-initialize-s${s.season.number}`));
+}
+export function enableCurrentSeasonAi(raw,at,names=[]){
+  const s=normalizeWorld(raw);if(s.ai)return validateAiState(s);
+  requireGame(s.featureVersion===6&&s.season&&!s.season.endedAt,'진행 중인 새 규칙 시즌이 필요합니다.');
+  requireGame(at>=s.updatedAt,'전장보다 이전 활성화 시각입니다.');
+  s.ai={version:1,enabled:true,startCount:3,nextSerial:1,spawnRound:Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs),lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
+  // Ongoing season: attach metadata only; no starting AI or retroactive revolts.
+  return validateAiState(checkpoint(s,s.revision,at,'ai-enable-s'+s.season.number));
+}
+export function seedOpeningAis(raw,count,at,names=[]){
+  const s=normalizeWorld(raw);if(s.ai)return validateAiState(s);requireGame(Number.isInteger(count)&&count>=1&&count<=5,'시작 AI 수는1~5명입니다.');
+  s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnRound:Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs),lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
+  // A player may connect before the scheduler: preserve occupied cities and armies.
+  for(const t of ordered(s,'ai-start',Object.values(s.territories).filter(t=>!t.owner)).slice(0,count))createAi(s,t,at,4);
+  addHistory(s,'ai-start-s'+s.season.number,at,{type:'ai',text:`지난 군웅들이 새 강토에서 다시 깃발을 올렸습니다.`});
+  return validateAiState(checkpoint(s,s.revision,at,'ai-opening-s'+s.season.number));
 }
 export function internalCandidates(s,uid,at){
   if(ownedTerritories(s,uid).length<AI_POLICY.minCountry)return [];
@@ -73,6 +91,6 @@ export function spawnInternalAis(raw,at){
     if(old.length){const q=s.returnQueues[owner]??={from:t.id,at,life:s.players[owner].life,units:[]};for(const u of old){u.readyAt=Math.max(u.readyAt,at+RULES.actionMs);if(u.sides>4)u.moveReadyAt=Math.max(u.moveReadyAt,at+RULES.actionMs);u.stationTerritoryId='';}q.units.push(...old);}
     const uid=createAi(s,t,at,6,owner);spawned.push({uid,territory:t.id,previousOwner:owner});
   }
-  if(spawned.length)addHistory(s,`ai-revolt-s${s.season.number}-${round}`,at,{type:'ai',text:`내부에서 AI 군주 ${spawned.length}명이 등장했습니다: ${spawned.map(x=>`${s.players[x.uid].name} · ${placeInfo(x.territory).ko}`).join(', ')}`});
+  if(spawned.length)addHistory(s,`ai-revolt-s${s.season.number}-${round}`,at,{type:'ai',text:`내부에서 군웅 ${spawned.length}명이 새 깃발을 올렸습니다: ${spawned.map(x=>`${s.players[x.uid].name} · ${placeInfo(x.territory).ko}`).join(', ')}`});
   return checkpoint(s,revision,at,`ai-spawn-round-s${s.season.number}-${round}`);
 }

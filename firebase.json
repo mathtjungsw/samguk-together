@@ -1,9 +1,24 @@
 {
-  "database": { "rules": "firebase.database.rules.json" },
+  "database": {
+    "rules": "firebase.database.rules.json"
+  },
   "emulators": {
-    "auth": { "port": 9099 },
-    "database": { "port": 9000 },
-    "ui": { "enabled": false },
+    "auth": {
+      "port": 9099
+    },
+    "database": {
+      "port": 9000
+    },
+    "ui": {
+      "enabled": false
+    },
     "singleProjectMode": true
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "predeploy": [
+      "node tools/build-functions.mjs"
+    ]
   }
 }

@@ -11,7 +11,7 @@ export function runAiRound(raw,at,{seedFor,plannerOptions={},maxDecisionMs=40_00
   requireGame(typeof seedFor==='function','서버 전용 전투 난수 공급기가 필요합니다.');
   const cmd=(uid,type,fields,id)=>{s=applyCommand(s,uid,{id,type,...fields,baseRevision:s.revision,at},at);};
   const aiPlayers=()=>Object.values(s.players).filter(isAi);
-  const settler=aiPlayers()[0]?.uid;if(!settler)return {world:s,actions,reason:'no-ai'};
+  const settler=aiPlayers()[0]?.uid||Object.keys(s.players)[0];if(!settler)return {world:s,actions,reason:'no-players'};
   cmd(settler,'recruit',{},`ai-settle-s${s.season.number}-r${round}`);
   if(!s.season.endedAt)s=spawnInternalAis(s,at);
   if(s.season.endedAt)return {world:s,actions,reason:'season-ended'};

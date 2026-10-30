@@ -30,6 +30,7 @@ export class LocalStore {
 export class FirebaseStore {
   constructor(config){this.config=config;this.uid=null;this.world=null;this.chat=null;this.mode='online';this.connected=false;this.worldReady=false;this.chatReady=false;this.offset=0;this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.stops=[];this.pendingId=null;}
   now(){return Date.now()+this.offset;}
+  async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
   serialize(task){const result=(this.writeQueue||Promise.resolve()).catch(()=>{}).then(task);this.writeQueue=result.catch(()=>{});return result;}
   async setup(){
     if(this.app)return;
