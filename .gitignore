@@ -9,3 +9,5 @@ playtest/
 functions/node_modules/
 functions/game.js
 functions/.env*
+
+functions/record-versions.js

@@ -14,7 +14,7 @@ for(let seed=0;seed<seeds;seed++){
   // Core-only JSON estimate; excludes feed, outbox, writes and wire overhead.
   const state={...s,history:undefined};readBytes+=Buffer.byteLength(JSON.stringify(state));
   const out=runAiRound(s,start+minute*60_000,{seedFor:id=>hash32('simulation-private-key:'+id),plannerOptions:{samples,finalSamples:Math.max(2048,samples)},maxDecisionMs:40_000});
-  s=out.world;actions+=out.actions.length;attacks+=out.actions.filter(a=>a.category==='attack').length;maxMs=Math.max(maxMs,out.elapsedMs||0);rounds++;
+  s=out.world;actions+=out.actions.length;attacks+=out.actions.filter(a=>['attack','riskAttack'].includes(a.category)).length;maxMs=Math.max(maxMs,out.elapsedMs||0);rounds++;
   if(minute%60===0)process.stdout.write(`seed ${seed+1}/${seeds}, hour ${minute/60}/${hours}, AI ${Object.values(s.players).filter(isAi).length}, actions ${actions}\n`);
  }
  const report={seed,hours,count,rounds,actions,attacks,aiCount:Object.values(s.players).filter(isAi).length,territories:Object.values(s.players).filter(isAi).map(p=>({name:p.name,territories:ownedTerritories(s,p.uid).length})),ended:!!s.season.endedAt,reason:s.season.reason||'',elapsedMs:Math.round(performance.now()-began),maxRoundMs:Math.round(maxMs),coreReadJsonBytes:readBytes};reports.push(report);console.log(JSON.stringify(report));

@@ -1,2 +1,4 @@
 import {build} from 'esbuild';
-await build({stdin:{contents:"export * from './server/ai-live.js';export {systemEvents,appendSystemMessages} from './src/engine-next.js';export {castAiBallot,aiElectors} from './src/ai-world.js';export {createSeasonWorld,followingSeason} from './src/seasons.js';export {historyFeed} from './src/world-data.js';",resolveDir:process.cwd()},outfile:'functions/game.js',bundle:true,platform:'node',format:'esm',target:'node22',legalComments:'none'});
+await build({stdin:{contents:"export * from './server/ai-live.js';export {loadAiContext} from './server/ai-context.js';export {systemEvents,appendSystemMessages} from './src/engine-next.js';export {castAiBallot,aiElectors} from './src/ai-world.js';export {createSeasonWorld,followingSeason} from './src/seasons.js';export {historyFeed} from './src/world-data.js';",resolveDir:process.cwd()},outfile:'functions/game.js',bundle:true,platform:'node',format:'esm',target:'node22',legalComments:'none'});
+
+await build({entryPoints:['server/record-versions.js'],outfile:'functions/record-versions.js',bundle:true,platform:'node',format:'esm',target:'node22'});

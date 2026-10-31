@@ -12,7 +12,7 @@ export const historyFeed=s=>({revision:s.revision,events:Object.fromEntries(Obje
 export const feedValid=(feed,revision)=>!!feed&&feed.revision===revision&&typeof feed.events==='object';
 export const coherentWorld=s=>s.revision===0||s.command?.baseRevision+1===s.revision&&s.command?.at===s.updatedAt;
 export class WorldReader{
-  constructor(sdk,db,id,{onWorld=()=>{},onError=()=>{}}={}){Object.assign(this,{sdk,db,id,onWorld,onError});this.stops=[];this.raw={};this.ready=new Set();this.details=new Map();this.reading=null;this.fallbacks=0;}
+  constructor(sdk,db,id,{onWorld=()=>{},onError=()=>{},cache=null}={}){Object.assign(this,{sdk,db,id,onWorld,onError,cache});this.stops=[];this.raw={};this.ready=new Set();this.details=new Map();this.reading=null;this.fallbacks=0;}
   ref(path){return this.sdk.ref(this.db,path);}
   group(side){return this.sdk.query(this.ref('worlds/'+this.id),this.sdk.orderByKey(),side==='before'?this.sdk.endBefore('history'):this.sdk.startAfter('history'));}
   async get(path){return (await this.sdk.get(this.ref(path))).val();}
@@ -59,6 +59,12 @@ export class WorldReader{
       this.onWorld(structuredClone(this.raw));
     }finally{this.flushing=false;}
   }
-  async detail(id){if(!this.details.has(id)){const e=await this.get('worlds/'+this.id+'/history/'+id);if(!e?.result)throw Error('이 전투의 상세 기록이 보관 범위를 벗어났습니다.');this.details.set(id,e);if(this.details.size>12)this.details.delete(this.details.keys().next().value);}return structuredClone(this.details.get(id));}
+  async detail(id){const key='battle:'+this.id+':'+id,summary=this.feed?.events?.[id]||this.raw.history?.[id],signature=summary?JSON.stringify(summary):'';let version;
+    try{version=await this.get('recordVersions/'+this.id+'/battles/'+id)||'no-stamp';version+=':'+signature;}catch(error){const offline=await this.cache?.get(key,undefined);if(offline?.result)return {...offline,localUnverified:true};throw Error('기록의 최신 상태를 확인하지 못했습니다. 연결 후 다시 열어 주세요.');}
+    const held=this.details.get(id);if(held?.version===version)return structuredClone(held.data);
+    const saved=await this.cache?.get(key,version);if(saved?.id===id&&saved.result&&Array.isArray(saved.result.attack)&&Array.isArray(saved.result.defend)&&Number.isFinite(saved.result.score)){this.details.set(id,{version,data:saved});return structuredClone(saved);}
+    const e=await this.get('worlds/'+this.id+'/history/'+id);if(!e?.result)throw Error('이 전투의 상세 기록이 보관 범위를 벗어났습니다.');
+    if(!this.raw.pendingBattles?.[id])await this.cache?.put(key,version,e);this.details.set(id,{version,data:e});if(this.details.size>12)this.details.delete(this.details.keys().next().value);return structuredClone(e);
+  }
   close(){this.closed=true;clearTimeout(this.timer);clearTimeout(this.legacyTimer);this.stops.forEach(s=>s());this.stops=[];this.details.clear();}
 }

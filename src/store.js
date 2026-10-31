@@ -1,8 +1,9 @@
+import {recordCache} from './record-cache.js';
 import {WorldReader,historyFeed} from './world-data.js';
 const indexEntry=result=>({id:result.id,title:result.title,endedAt:result.endedAt});
 import {seasonClosed} from './season-policy.js';
 import {canWrite} from './field-ui.js';
-import {worldWritable,activeWorld,createSeasonWorld,followingSeason} from './seasons.js';
+import {worldWritable,activeWorld,createSeasonWorld,followingSeason,archiveTestSeason} from './seasons.js';
 import {createWorld,normalizeWorld,upgradeWorld,applyCommand,addChatMessage,appendSystemMessages,systemEvents,hasDueRecruitment,GameError,RULES} from './engine.js';
 
 export const commandId=()=>crypto.randomUUID();
@@ -46,7 +47,14 @@ export class FirebaseStore {
   }
   async readWorldAt(id){
     if(!this.config.compactSync)return (await this.sdk.get(this.sdk.ref(this.db,'worlds/'+id))).val();
-    this.readers??=new Map();let reader=this.readers.get(id);if(!reader){reader=new WorldReader(this.sdk,this.db,id);this.readers.set(id,reader);}return reader.read();
+    this.readers??=new Map();let reader=this.readers.get(id);if(!reader){reader=new WorldReader(this.sdk,this.db,id,{cache:this.records()});this.readers.set(id,reader);}return reader.read();
+  }
+  records(){const scope=JSON.stringify([this.config.firebase?.projectId||this.config.firebase?.databaseURL||'test',this.uid||'anonymous']);if(this.recordScope!==scope){this.recordScope=scope;this.recordStorage=recordCache(scope);}return this.recordStorage;}
+  async seasonArchive(id){const worldId=id==='test'?'main':id,path='worlds/'+worldId,key='archive:'+worldId,cache=this.records();
+    let version;try{version=(await this.sdk.get(this.sdk.ref(this.db,'recordVersions/'+worldId+'/archive'))).val();}catch(error){const offline=await cache.get(key,undefined);if(offline?.rankings&&offline?.territories)return {...offline,localUnverified:true};throw error;}const cached=version?await cache.get(key,version):null;if(cached?.rankings&&cached?.territories)return cached;
+    const archive=id==='test'?archiveTestSeason((await this.sdk.get(this.sdk.ref(this.db,path))).val()):(await this.sdk.get(this.sdk.ref(this.db,path+'/season/result'))).val();if(!archive)throw Error('최종 기록을 아직 정리하고 있습니다.');
+    // Never persist against a stale metadata stamp while a correction is arriving.
+    const after=(await this.sdk.get(this.sdk.ref(this.db,'recordVersions/'+worldId+'/archive'))).val();if(version&&after===version)await cache.put(key,version,archive);return archive;
   }
   async battleDetail(id){return this.reader?this.reader.detail(id):(await this.sdk.get(this.sdk.ref(this.db,'worlds/'+this.config.worldId+'/history/'+id))).val();}
   async advanceClosedSeason(){
@@ -80,7 +88,7 @@ export class FirebaseStore {
     if(!raw){const initial=createWorld(this.now(),`samguk:${this.config.worldId||'main'}:${entropy()}`);initial.command.actor=this.uid;const result=await this.sdk.runTransaction(this.ref,current=>current?undefined:initial,{applyLocally:false});raw=result.committed?result.snapshot.val():(await this.sdk.get(this.ref)).val();}
     this.world=normalizeWorld(raw);this.worldReady=true;if(this.world.season?.endedAt)this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(this.world.season.result)).catch(()=>{});
     if(this.config.compactSync){
-      this.reader=this.readers?.get(this.config.worldId||'main')||new WorldReader(this.sdk,this.db,this.config.worldId||'main');
+      this.reader=this.readers?.get(this.config.worldId||'main')||new WorldReader(this.sdk,this.db,this.config.worldId||'main',{cache:this.records()});
       this.reader.onWorld=raw=>{try{const world=normalizeWorld(raw);this.worldReady=true;this.observed=world;if(world.command.id!==this.pendingId){this.world=world;this.onWorld(world);}this.onConnection(this.connected);}catch(e){this.worldReady=false;this.onConnection(false,e.message);}};
       this.reader.onError=e=>{this.worldReady=false;this.onConnection(false,firebaseMessage(e));};this.reader.start();
     }else this.stops.push(this.sdk.onValue(this.ref,snap=>{if(!snap.exists()){this.worldReady=false;this.onConnection(false,'전황을 다시 확인해야 합니다.');return;}try{const world=normalizeWorld(snap.val());this.worldReady=true;this.observed=world;if(world.command.id===this.pendingId)return;this.world=world;this.onWorld(world);}catch(error){this.worldReady=false;this.onConnection(false,error.message);}},error=>{this.worldReady=false;this.onConnection(false,firebaseMessage(error));}));

@@ -1,3 +1,5 @@
+import {availableColor,assignColor} from './faction-colors.js';
+import {chooseAiName} from './ai-names.js';
 // Server-side domain logic. No browser import or production activation hook.
 import {normalizeWorld,refreshIndexes,reconcileRoles,emptyRoles,capacityOf,isLocked} from './engine-next.js';
 import {adjacent,ownedTerritories,hash32,RULES,requireGame,placeInfo} from './game-core.js';
@@ -9,7 +11,7 @@ export const isAi=p=>p?.kind==='ai';
 export function validateAiState(s){
   const a=s.ai;if(!a)return s;
   requireGame(a.version===1&&typeof a.enabled==='boolean'&&Number.isInteger(a.startCount)&&a.startCount>=1&&a.startCount<=5&&Number.isInteger(a.nextSerial)&&a.nextSerial>=1&&Number.isInteger(a.spawnRound)&&a.spawnRound>=0&&Number.isInteger(a.lastTick)&&a.lastTick>=-1,'AI 운영 기록 버전을 확인해 주세요.','CORRUPT');
-  for(const p of Object.values(s.players).filter(isAi)){if(typeof p.ai==='string'){try{p.ai=JSON.parse(p.ai);}catch{requireGame(false,'AI 판단 기록을 읽을 수 없습니다.','CORRUPT');}}const x=p.ai;if(x)x.moves??={};requireGame(x?.version===1&&Number.isFinite(x.bornAt)&&Number.isInteger(x.lastRound)&&x.lastRound>=-1&&Number.isFinite(x.nextDecisionAt)&&Number.isInteger(x.idleRounds)&&x.idleRounds>=0&&x.moves&&typeof x.moves==='object','AI 군주 판단 기록이 손상되었습니다.','CORRUPT');}
+  for(const p of Object.values(s.players).filter(isAi)){if(typeof p.ai==='string'){try{p.ai=JSON.parse(p.ai);}catch{requireGame(false,'AI 판단 기록을 읽을 수 없습니다.','CORRUPT');}}const x=p.ai;if(x)x.moves??={};requireGame(x?.version===1&&Number.isFinite(x.bornAt)&&Number.isInteger(x.lastRound)&&x.lastRound>=-1&&Number.isFinite(x.nextDecisionAt)&&Number.isInteger(x.idleRounds)&&x.idleRounds>=0&&x.moves&&typeof x.moves==='object','AI 군주 판단 기록이 손상되었습니다.','CORRUPT');if(x.behaviorVersion!==undefined)requireGame(x.behaviorVersion===2&&Number.isFinite(x.lastAttackAt)&&x.lastAttackAt>=0&&Number.isFinite(x.nextRiskAt)&&x.nextRiskAt>=0,'AI 공격 대기 기록을 확인해 주세요.','CORRUPT');}
   return s;
 }
 export function aiElectors(s){
@@ -33,12 +35,12 @@ const ordered=(s,key,items)=>items.slice().sort((a,b)=>hash32(`${s.seed}:${key}:
 function addHistory(s,id,at,fields){s.history[id]={id,at,actor:'ai-system',...fields};s.history=Object.fromEntries(Object.entries(s.history).sort((a,b)=>b[1].at-a[1].at||b[0].localeCompare(a[0])).slice(0,100));}
 function checkpoint(s,before,at,id){s.revision=before+1;s.updatedAt=at;s.command={...s.command,id,type:'aiBatch',actor:'ai-system',at,baseRevision:before,protocol:6};reconcileRoles(s,at);refreshIndexes(s);return normalizeWorld(s);}
 export function previousRulerNames(archives){return [...new Set(archives.flatMap(a=>Object.values(a?.rankings||{}).map(p=>String(p.name||'').trim().slice(0,16))).filter(Boolean))];}
-function rulerName(s,n){const used=new Set(Object.values(s.players).map(p=>p.name)),pool=typeof s.ai.namePool==='string'?JSON.parse(s.ai.namePool):(s.ai.namePool||[]),available=pool.filter(name=>!used.has(name));if(available.length)return ordered(s,'name:'+n,available.map(name=>({id:name})))[0].id;const base=pool[(n-1)%Math.max(1,pool.length)]||'옛 군주';let name=base;for(let i=2;used.has(name);i++)name=base.slice(0,12)+' '+i;return name;}
+function rulerName(s,n){return chooseAiName(s,'',n-1);}
 function createAi(s,t,at,infantry,origin=''){
-  const n=s.ai.nextSerial++,uid=`ai-s${s.season.number}-${String(n).padStart(3,'0')}`,name=rulerName(s,n);
+  const slot=availableColor(s,''),n=s.ai.nextSerial++,uid=`ai-s${s.season.number}-${String(n).padStart(3,'0')}`,name=rulerName(s,n);
   requireGame(!s.players[uid],'AI 군주 번호가 이미 사용 중입니다. 기존 군주를 보존했습니다.','CORRUPT');
-  s.players[uid]={uid,name,kind:'ai',nameChosen:true,color:Object.keys(s.players).length%15,joinedAt:at,life:1,eliminatedAt:0,startedAt:at,captures:0,defeats:0,kills:0,deaths:0,revived:0,exchanged:0,rulerId:'',retreatCostD4:0,ai:{version:1,bornAt:at,origin,lastRound:-1,nextDecisionAt:at+RULES.protectionMs,idleRounds:0,moves:{}}};
-  t.owner=uid;t.generation++;t.revision++;t.roles=emptyRoles();t.protectionUntil=at+RULES.protectionMs;t.actionReadyAt=at+RULES.actionMs;t.lastRecruitAt=at;t.nextRecruitAt=at+RULES.recruitMs;t.cycleMs=RULES.recruitMs;t.lastAttackAt=0;t.battleLock='';
+  s.players[uid]={uid,name,kind:'ai',nameChosen:true,colorSlot:slot,color:Object.keys(s.players).length%15,joinedAt:at,life:1,eliminatedAt:0,startedAt:at,captures:0,defeats:0,kills:0,deaths:0,revived:0,exchanged:0,rulerId:'',retreatCostD4:0,ai:{version:1,bornAt:at,origin,lastRound:-1,nextDecisionAt:at+RULES.protectionMs,behaviorVersion:2,lastAttackAt:at,nextRiskAt:at,idleRounds:0,moves:{}}};
+  assignColor(s,uid);t.owner=uid;t.generation++;t.revision++;t.roles=emptyRoles();t.protectionUntil=at+RULES.protectionMs;t.actionReadyAt=at+RULES.actionMs;t.lastRecruitAt=at;t.nextRecruitAt=at+RULES.recruitMs;t.cycleMs=RULES.recruitMs;t.lastAttackAt=0;t.battleLock='';
   t.units=[20,...Array(infantry).fill(4)].map((sides,i)=>stampUnit({id:`${uid}:initial:${i}`,name:sides===20?name:'병사',sides,readyAt:at+RULES.actionMs,moveReadyAt:at+RULES.actionMs},at,t.id));
   return uid;
 }

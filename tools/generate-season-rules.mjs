@@ -1,3 +1,4 @@
+import {recordColorRules} from './record-color-rules.mjs';
 import {aiCompatibleRules} from './ai-compatible-rules.mjs';
 import fs from 'node:fs';
 import {cycleRules} from './season-cycle-rules.mjs';
@@ -29,5 +30,5 @@ function baseSeasonRules(end=TEST_END,start=SEASON1_START){
  old['.write']=`(${old['.write']})&&now<${end}`;chat['.write']=`(${chat['.write']})&&now>=${start}`;root.rules.chat['season-1']=chat;
  return root;
 }
-export function makeSeasonRules(end=TEST_END,start=SEASON1_START){const root=baseSeasonRules(end,start);return aiCompatibleRules(historyFeedRules(Date.now()>=end?cycleRules(root):root));}
+export function makeSeasonRules(end=TEST_END,start=SEASON1_START){const root=baseSeasonRules(end,start);return recordColorRules(aiCompatibleRules(historyFeedRules(Date.now()>=end?cycleRules(root):root)));}
 if(process.argv[1]?.endsWith('generate-season-rules.mjs')){fs.writeFileSync('firebase.database.rules.json',JSON.stringify(makeSeasonRules())+'\n');console.log('Season rules generated.');}

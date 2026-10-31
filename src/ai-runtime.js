@@ -1,3 +1,4 @@
+import {prepareAiBehavior,riskPolicy,riskDraw} from './ai-risk.js';
 // Pure round execution. Storage/lease and billing activation are separate adapters.
 import {normalizeWorld,applyCommand,movementPlan,myPendingBattle,refreshIndexes} from './engine-next.js';
 import {ownedTerritories,hash32,requireGame} from './game-core.js';
@@ -10,6 +11,7 @@ export function runAiRound(raw,at,{seedFor,plannerOptions={},maxDecisionMs=40_00
   requireGame(at>=s.updatedAt,'전장의 시각보다 이전 AI 회차입니다.');
   requireGame(typeof seedFor==='function','서버 전용 전투 난수 공급기가 필요합니다.');
   const cmd=(uid,type,fields,id)=>{s=applyCommand(s,uid,{id,type,...fields,baseRevision:s.revision,at},at);};
+  prepareAiBehavior(s,at);
   const aiPlayers=()=>Object.values(s.players).filter(isAi);
   const settler=aiPlayers()[0]?.uid||Object.keys(s.players)[0];if(!settler)return {world:s,actions,reason:'no-players'};
   cmd(settler,'recruit',{},`ai-settle-s${s.season.number}-r${round}`);
@@ -24,7 +26,10 @@ export function runAiRound(raw,at,{seedFor,plannerOptions={},maxDecisionMs=40_00
     for(let step=0;step<3&&clock()-started<maxDecisionMs;step++){
       const pending=myPendingBattle(s,uid);if(pending){cmd(uid,'resolveGuard',{battleId:pending.id,guardChoice:pending.defaultTarget},`ai-guard-s${s.season.number}-r${round}-${uid}`);}
       const planner=createAiPlanner(s,at,{...plannerOptions,shouldContinue:()=>clock()-started<maxDecisionMs});
-      let decision=territorial<2?planner.bestSupport(uid,excluded)||planner.bestAttack(uid,excluded)||planner.bestTransfer(uid,excluded)||planner.bestRevival(uid,excluded):null;
+      let decision=territorial<2?planner.bestAttack(uid,excluded):null;
+      const meta=s.players[uid];
+      if(!decision&&territorial<2&&riskPolicy(meta.ai.lastAttackAt??meta.ai.bornAt,at)&&at>=(meta.ai.nextRiskAt||0)){const risk=planner.bestAttack(uid,excluded,true);if(riskDraw(s,meta,at,seedFor,!!risk))decision=risk;}
+      if(!decision&&territorial<2)decision=planner.bestSupport(uid,excluded)||planner.bestTransfer(uid,excluded)||planner.bestRevival(uid,excluded);
       if(!decision&&officer<1)decision=planner.bestTransfer(uid,excluded,true);
       if(!decision)break;
       const independent=decision.type==='move'&&movementPlan(s,uid,decision.from,decision.to,decision.unitIds,at).independent;
@@ -32,11 +37,12 @@ export function runAiRound(raw,at,{seedFor,plannerOptions={},maxDecisionMs=40_00
       if(!independent&&territorial>=2)break;
       const id=`ai-action-s${s.season.number}-r${round}-${uid}-${step}`,seed=seedFor(id);
       requireGame(Number.isInteger(seed)&&seed>=0&&seed<=0xffffffff,'서버 전투 난수가 올바르지 않습니다.');
+      const wasAttack=decision.type==='move'&&s.territories[decision.to]?.owner!==uid;
       cmd(uid,decision.type,{from:decision.from,to:decision.to,territoryId:decision.territoryId,unitIds:decision.unitIds,seed},id);
       // Guan Ping uses the already frozen dice and the default eligible officer.
       const guard=myPendingBattle(s,uid);if(guard)cmd(uid,'resolveGuard',{battleId:guard.id,guardChoice:guard.defaultTarget},id+'-guard');
       if(independent)officer++;else territorial++;taken++;excluded.add(decision.from);
-      const current=s.players[uid].ai;if(decision.type==='move')for(const unitId of decision.unitIds)current.moves[unitId]={from:decision.from,to:decision.to,at};
+      const current=s.players[uid].ai;if(wasAttack)current.lastAttackAt=at;if(decision.type==='move')for(const unitId of decision.unitIds)current.moves[unitId]={from:decision.from,to:decision.to,at};
       actions.push({id,uid,category:decision.category,from:decision.from,to:decision.to||decision.territoryId,count:decision.unitIds.length,reason:decision.reason,...(decision.probability?{chance:decision.probability.lower}:{} )});
       if(s.season.endedAt)break;
     }

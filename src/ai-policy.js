@@ -1,3 +1,4 @@
+import {riskPolicy} from './ai-risk.js';
 import {movementPlan,capacityOf,isLocked,estimateBattle,validateRevival} from './engine-next.js';
 import {adjacent,ownedTerritories,livingUnits,hash32,RULES} from './game-core.js';
 import {chooseOfficers,officerOrder} from './role-policy.js';
@@ -9,8 +10,8 @@ const mean=units=>units.reduce((n,u)=>n+(u.sides+1)/2,0);
 const ids=units=>units.map(u=>u.id);
 const bounded=(n,max=1)=>Math.max(0,Math.min(max,n));
 const front=(s,t)=>adjacent(t.id).some(id=>s.territories[id].owner!==t.owner);
-export function aiThreshold(s,uid,units,target){
-  const idle=s.players[uid].ai?.idleRounds||0,relief=Math.min(.15,Math.floor(idle/6)*.05),base=target.owner&&!isAi(s.players[target.owner]) ? .80 : .75;
+export function aiThreshold(s,uid,units,target,at=s.updatedAt){
+  const elapsed=Math.max(0,at-(s.players[uid].ai?.lastAttackAt??s.players[uid].ai?.bornAt??at)),relief=Math.min(.15,Math.floor(elapsed/3600000)*.05),base=target.owner&&!isAi(s.players[target.owner]) ? .80 : .75;
   return Math.max(units.some(u=>u.sides===20)?.90:0,.65,base-relief);
 }
 export function canAttackCountry(s,uid,target){return target.owner!==uid&&(!target.owner||isAi(s.players[target.owner])||ownedTerritories(s,target.owner).length>2);}
@@ -32,8 +33,8 @@ export function createAiPlanner(s,at,{samples=512,finalSamples=2048,estimate=est
   };
   const legalUnits=(world,uid,from,to,units)=>!movementPlan(world,uid,from,to,ids(units),at).error;
   const ready=t=>t.units.filter(u=>u.readyAt<=at).sort(officerOrder(s.seed,'ai'));
-  const attackFormations=(world,a,b)=>{
-    const units=ready(a),d4=units.filter(u=>u.sides===4),generals=units.filter(u=>[6,8,12].includes(u.sides)),ruler=units.filter(u=>u.sides===20),max=Math.max(0,a.units.length-1),forms=[];
+  const attackFormations=(world,a,b,risk=false)=>{
+    const units=ready(a).filter(u=>!risk||u.sides!==20),d4=units.filter(u=>u.sides===4),generals=units.filter(u=>[6,8,12].includes(u.sides)),ruler=units.filter(u=>u.sides===20),max=Math.max(0,a.units.length-1),forms=[];
     const safeCount=Math.max(1,Math.floor(a.units.length*(adjacent(a.id).some(id=>world.territories[id].owner&&world.territories[id].owner!==a.owner)?.6:.85)));
     const infantry=d4.slice(0,Math.min(max,safeCount));
     const attackHeroes=chooseOfficers(world,a,generals,'attack',at,2),economic=new Set(generals.filter(u=>effectOf(u)?.economic).map(u=>u.id));
@@ -57,17 +58,18 @@ export function createAiPlanner(s,at,{samples=512,finalSamples=2048,estimate=est
     }
     return risk;
   };
-  function scoreAttack(uid,a,b,units,p){
+  function scoreAttack(uid,a,b,units,p,risk=false,threshold=aiThreshold(s,uid,units,b,at)){
     const copy=structuredClone(s),src=copy.territories[a.id],dst=copy.territories[b.id],selected=new Set(ids(units));
     src.units=src.units.filter(u=>!selected.has(u.id));dst.owner=uid;dst.units=structuredClone(units).map(u=>({...u,readyAt:Math.max(u.readyAt,at+RULES.actionMs)}));dst.protectionUntil=0;
     const sourceRisk=threat(copy,a.id),counterRisk=threat(copy,b.id);
-    if(sourceRisk>=.65||counterRisk>=.8)return null;
+    if(sourceRisk>=.65||!risk&&counterRisk>=.8)return null;
     const maxCount=Math.max(1,...Object.values(counts)),value=bounded(capacityOf(b.id,s,at)/19),links=bounded(adjacent(b.id).filter(id=>s.territories[id].owner===uid).length/3),largest=bounded((counts[b.owner]||0)/maxCount),named=units.filter(u=>u.heroId).length/Math.max(1,units.length),ruler=Number(units.some(u=>u.sides===20));
     const retaliation=Object.values(s.history||{}).some(e=>(e.result||e.battle)?.attacker===b.owner&&(e.result||e.battle)?.defender===uid&&at-e.at<AI_POLICY.spawnMs)?1:0;
-    return {from:a.id,to:b.id,unitIds:ids(units),units,probability:p,threshold:aiThreshold(s,uid,units,b),sourceRisk,counterRisk,score:40*p.lower+10*value+8*links+6*largest+4*retaliation-25*sourceRisk-15*counterRisk-10*named-10*ruler,reason:'유리한 인접 전투'};
+    return {from:a.id,to:b.id,unitIds:ids(units),units,probability:p,threshold,sourceRisk,counterRisk,score:40*p.lower+10*value+8*links+6*largest+4*retaliation-25*sourceRisk-15*counterRisk-10*named-10*ruler,reason:'유리한 인접 전투'};
   }
   const tie=(key,a,b)=>hash32(`${s.seed}:${Math.floor(at/AI_POLICY.decisionMs)}:${key}:${a.from}:${a.to}`)-hash32(`${s.seed}:${Math.floor(at/AI_POLICY.decisionMs)}:${key}:${b.from}:${b.to}`);
-  function bestAttack(uid,excluded=new Set()){
+  function bestAttack(uid,excluded=new Set(),risk=false){
+    const policy=risk?riskPolicy(s.players[uid].ai.lastAttackAt??s.players[uid].ai.bornAt,at):null;if(risk&&!policy)return null;const threshold=(units,b)=>risk?policy.minimum:aiThreshold(s,uid,units,b,at);
     const cheap=[];
     for(const a of ownedTerritories(s,uid))if(!excluded.has(a.id)&&a.actionReadyAt<=at&&a.protectionUntil<=at&&!isLocked(s,a.id))for(const to of adjacent(a.id)){
       const b=s.territories[to];if(!canAttackCountry(s,uid,b)||b.protectionUntil>at||isLocked(s,to))continue;
@@ -75,16 +77,16 @@ export function createAiPlanner(s,at,{samples=512,finalSamples=2048,estimate=est
     }
     cheap.sort((a,b)=>b.value-a.value||a.a.id.localeCompare(b.a.id)||a.b.id.localeCompare(b.b.id));
     const candidates=[];
-    for(const {a,b}of cheap.slice(0,8))for(const units of attackFormations(s,a,b)){
+    for(const {a,b}of cheap.slice(0,8))for(const units of attackFormations(s,a,b,risk)){
       if(!shouldContinue())return null;
       // Cheap sampling only removes unpromising search candidates, never resolves combat.
-      if(probability(s,a.id,b.id,units,64).upper<aiThreshold(s,uid,units,b))continue;
-      const p=probability(s,a.id,b.id,units);if(p.lower<aiThreshold(s,uid,units,b))continue;
-      const candidate=scoreAttack(uid,a,b,units,p);if(candidate)candidates.push(candidate);
+      if(probability(s,a.id,b.id,units,64).upper<threshold(units,b))continue;
+      const p=probability(s,a.id,b.id,units);if(p.lower<threshold(units,b))continue;
+      const candidate=scoreAttack(uid,a,b,units,p,risk,threshold(units,b));if(candidate)candidates.push(candidate);
     }
     const order=(a,b)=>b.score-a.score||a.units.length-b.units.length||tie('attack',a,b);candidates.sort(order);
-    const finalists=candidates.slice(0,2).map(c=>{const p=probability(s,c.from,c.to,c.units,finalSamples);return p.lower<c.threshold?null:scoreAttack(uid,s.territories[c.from],s.territories[c.to],c.units,p);}).filter(Boolean).sort(order);
-    return finalists[0]?{...finalists[0],type:'move',category:'attack'}:null;
+    const finalists=candidates.slice(0,2).map(c=>{const p=probability(s,c.from,c.to,c.units,finalSamples);return p.lower<c.threshold?null:scoreAttack(uid,s.territories[c.from],s.territories[c.to],c.units,p,risk,c.threshold);}).filter(Boolean).sort(order);
+    return finalists[0]?{...finalists[0],type:'move',category:risk?'riskAttack':'attack'}:null;
   }
   const afterTransfer=(a,b,units)=>{
     const plan=movementPlan(s,a.owner,a.id,b.id,ids(units),at);if(plan.error)return null;

@@ -1,0 +1,15 @@
+{
+  "policy": "중국사·한국사 건국 군주만 사용. 황건적·삼국연의 일반 인물 제외. 현재150인 무장 및 별칭 제외. AI 접두어, 미사용 이름 우선 후 번호 확장.",
+  "charactersFile": "../src/data/ai-names.json",
+  "verifiedCount": 24,
+  "note": "이름과 건국 관계를 참고한 자료 목록. 자료 원문/이미지 복제 없음. 단군 등은 건국 전승임을 데이터에서 구분. 같은 인물의 묘호/본명 중복 없음.",
+  "sources": [
+    "https://contents.history.go.kr/front/hm/view.do?levelId=hm_030_0010&tabId=01&treeId=020103",
+    "https://contents.history.go.kr/front/ht/sub.do?levelId=ht_001",
+    "https://contents.history.go.kr/front/km/print.do?levelId=km_023_0030_0010_0020&whereStr=",
+    "https://en.chinaculture.org/gb/en_aboutchina/2003-09/24/content_22854.htm",
+    "https://encykorea.aks.ac.kr/Article/E0051028",
+    "https://entities.oclc.org/worldcat/entity/E39PBJhhtcBB83wDfKxVJT78md.html",
+    "https://www.ibiblio.org/chinesehistory/contents/03pol/c01s01a.html"
+  ]
+}
