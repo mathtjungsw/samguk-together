@@ -15,4 +15,12 @@
 
 ## 검증·배포 결과
 
-단위293개 및 전체 Firebase 규칙 검사 결과, 서버·화면 배포와 실제 지급 확인은 완료 시 갱신한다. 브라우저 제어는 현재 앱 설정에서 비활성화되어 실제 화면 검증은 제한된다. 빌드와 서버 검증을 화면 실물 검증으로 표현하지 않는다.
+- **구현·검증·배포·보상 지급·전체 공지 완료.** 단위293개와 Firebase 규칙91개, 합계384개 통과. 실제 운영 사본의 시상→여강 공격 저장도 에뮬레이터에서 성공했다. 운영 공격이나 대신 보상 추첨은 하지 않았다.
+- 코드 `8e6d4e3`, [GitHub Actions](https://github.com/mathtjungsw/samguk-together/actions/runs/41261423452) 검사·Pages 배포 성공. 운영 화면 자산 `app.js?v=d4069f266380`에 보상 버튼·새 릴리스·인증 수령 호출이 포함됨을 내려받아 확인했다.
+- Firebase 규칙245,346 bytes 게시 성공. 기존5개 함수 업데이트와 `rulerReward` 신규 배포 성공. 외부 인증 없는 수령 호출은401로 거절하고 CORS 사전 요청은204로 응답함을 확인했다. 기존 보복 평가2시간 창을 보존한 최종 AI 함수도 재배포했다.
+- 운영 시즌4에서 메타데이터 적용 revision1465, `spawnIntervalMs:14400000`, 환산 회차8을 확인했다. ETag 조건부 저장으로 동시 사용자 명령 덮어쓰기를 막고 영토·병력·복귀대기·무장 인덱스·보상 증빙이 전부 보존됨을 검사했다. 이는 전투나 초기화를 실행하는 작업이 아니다.
+- 김부장(본) 군주의 `compensation-20261101-attack-d12` 티켓은 D12·미사용1장 상태로 지급됐다. 동일 지급 도구 재실행은 기존 티켓을 반환해 추가 지급하지 않았다. 최종 확인 때도 미사용 상태였다.
+- `update-20261101-queue-reward-4h`가 운영 release와 전황에 적용됐으며 전체 채팅에는 해당 공지가 정확히1개였다. 새 화면 접속자는 기존 접속 알림 방식으로 안내받는다.
+- 브라우저 제어가 현재 앱 설정에서 비활성화되어 실제 화면 클릭·모바일 배치 검증은 하지 못했다. 빌드·배포 자산 검사와 서버 검증을 화면 실물 검증으로 표현하지 않는다. 실물 무장 추첨은 대상 군주에게 남겨두었다.
+
+운영 증빙: `playtest/queue-reward-production-proof.json`, `compensation-issued.txt`, `compensation-idempotence.txt`, `queue-real-snapshot-fixed.txt`, `queue-reward-unit-final.txt`, `queue-reward-all-rules.txt`, 배포 로그. 결과 확인은 [게임](https://mathtjungsw.github.io/samguk-together/) 새로고침 후 군령 상단 ‘D12 보상 랜덤권’에서 가능하다.
