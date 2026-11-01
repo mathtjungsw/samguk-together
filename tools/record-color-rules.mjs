@@ -6,4 +6,7 @@ p.colorSlot={'.validate':`newData.isNumber()&&newData.val()>=0&&newData.val()<10
 p['.validate']+="&&(!data.hasChild('colorSlot')||newData.hasChild('colorSlot'))&&(!newData.hasChild('colorSlot')||newData.child('landCount').val()==0||newData.parent().parent().child('colorClaims').child(''+newData.child('colorSlot').val()).val()==$uid)";
 const claimCmd=cmd.replaceAll('parent().parent().parent()','parent().parent()'),claimWorld=world.replaceAll('parent().parent().parent()','parent().parent()');
 w.colorClaims={'$slot':{'.validate':`newData.val()==data.val()||(newData.isString()&&newData.val()==auth.uid&&${claimCmd}&&(''+${claimWorld}.child('players').child(auth.uid).child('colorSlot').val())==$slot&&(!data.exists()||data.val()==auth.uid||root.child('worlds').child($world).child('players').child(data.val()).child('landCount').val()==0))`}};
+w.rewardClaims={'.validate':'newData.isString()&&newData.val()==data.val()'};
+w['.validate']+="&&newData.hasChild('rewardClaims')==data.hasChild('rewardClaims')";
+root.rules.rewardTickets={'$uid':{'.read':"auth!=null&&auth.uid==$uid&&auth.token.firebase.sign_in_provider=='google.com'",'.write':false}};
 root.rules.recordVersions={'.read':w['.read']};return compactPaths(root);}

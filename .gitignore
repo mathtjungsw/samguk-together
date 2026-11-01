@@ -11,3 +11,4 @@ functions/game.js
 functions/.env*
 
 functions/record-versions.js
+functions/rewards.js

@@ -6,7 +6,7 @@ import {adjacent,ownedTerritories,hash32,RULES,requireGame,placeInfo} from './ga
 import {stampUnit} from './role-policy.js';
 import {closeIfWon} from './season-policy.js';
 
-export const AI_POLICY=Object.freeze({version:1,decisionMs:600_000,spawnMs:7_200_000,minCountry:15,defaultStart:3});
+export const AI_POLICY=Object.freeze({version:1,decisionMs:600_000,spawnMs:14_400_000,minCountry:15,defaultStart:3});
 export const isAi=p=>p?.kind==='ai';
 export function validateAiState(s){
   const a=s.ai;if(!a)return s;
@@ -49,7 +49,7 @@ export function initializeAiWorld(raw,count=3,names=[]){
   const s=normalizeWorld(raw);if(s.ai?.version===1){requireGame(s.ai.startCount===count,'이미 준비된 AI 수와 다릅니다.');return s;}
   requireGame(s.featureVersion===6&&s.season&&!s.season.endedAt,'AI를 준비할 새 시즌이 필요합니다.');
   requireGame(!Object.keys(s.players).length&&!Object.values(s.territories).some(t=>t.owner),'진행 중인 시즌에는 시작 AI를 주입하지 않습니다.');
-  const at=s.season.startAt,revision=s.revision;s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnRound:0,lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
+  const at=s.season.startAt,revision=s.revision;s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnIntervalMs:AI_POLICY.spawnMs,spawnRound:0,lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
   const candidates=ordered(s,'ai-start',Object.values(s.territories));
   for(const t of candidates.slice(0,count))createAi(s,t,at,4);
   addHistory(s,`ai-start-s${s.season.number}`,at,{type:'ai',text:`지난 군웅 ${count}명이 새 강토에서 깃발을 올렸습니다.`});
@@ -59,13 +59,13 @@ export function enableCurrentSeasonAi(raw,at,names=[]){
   const s=normalizeWorld(raw);if(s.ai)return validateAiState(s);
   requireGame(s.featureVersion===6&&s.season&&!s.season.endedAt,'진행 중인 새 규칙 시즌이 필요합니다.');
   requireGame(at>=s.updatedAt,'전장보다 이전 활성화 시각입니다.');
-  s.ai={version:1,enabled:true,startCount:3,nextSerial:1,spawnRound:Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs),lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
+  s.ai={version:1,enabled:true,startCount:3,nextSerial:1,spawnIntervalMs:AI_POLICY.spawnMs,spawnRound:Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs),lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
   // Ongoing season: attach metadata only; no starting AI or retroactive revolts.
   return validateAiState(checkpoint(s,s.revision,at,'ai-enable-s'+s.season.number));
 }
 export function seedOpeningAis(raw,count,at,names=[]){
   const s=normalizeWorld(raw);if(s.ai)return validateAiState(s);requireGame(Number.isInteger(count)&&count>=1&&count<=5,'시작 AI 수는1~5명입니다.');
-  s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnRound:Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs),lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
+  s.ai={version:1,enabled:true,startCount:count,nextSerial:1,spawnIntervalMs:AI_POLICY.spawnMs,spawnRound:Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs),lastTick:-1,namePool:JSON.stringify(names),enabledAt:at};
   // A player may connect before the scheduler: preserve occupied cities and armies.
   for(const t of ordered(s,'ai-start',Object.values(s.territories).filter(t=>!t.owner)).slice(0,count))createAi(s,t,at,4);
   addHistory(s,'ai-start-s'+s.season.number,at,{type:'ai',text:`지난 군웅들이 새 강토에서 다시 깃발을 올렸습니다.`});
@@ -78,6 +78,8 @@ export function internalCandidates(s,uid,at){
 export function spawnInternalAis(raw,at){
   const s=validateAiState(normalizeWorld(raw));if(!s.ai?.enabled||s.season.endedAt||at<s.season.startAt)return s;
   requireGame(at>=s.updatedAt,'전장의 시각보다 이전 등장 회차입니다.');
+  // Rebase the old two-hour round once; otherwise its larger counter would delay new spawns.
+  if(s.ai.spawnIntervalMs!==AI_POLICY.spawnMs){s.ai.spawnRound=Math.floor(s.ai.spawnRound*(s.ai.spawnIntervalMs||7_200_000)/AI_POLICY.spawnMs);s.ai.spawnIntervalMs=AI_POLICY.spawnMs;}
   const round=Math.floor((at-s.season.startAt)/AI_POLICY.spawnMs);if(round<=s.ai.spawnRound)return s;
   const revision=s.revision;if(closeIfWon(s,at))return checkpoint(s,revision,s.season.endedAt,`ai-expired-s${s.season.number}`);
   // Freeze the countries before any spawn; new countries never spawn recursively.

@@ -64,7 +64,7 @@ export function createAiPlanner(s,at,{samples=512,finalSamples=2048,estimate=est
     const sourceRisk=threat(copy,a.id),counterRisk=threat(copy,b.id);
     if(sourceRisk>=.65||!risk&&counterRisk>=.8)return null;
     const maxCount=Math.max(1,...Object.values(counts)),value=bounded(capacityOf(b.id,s,at)/19),links=bounded(adjacent(b.id).filter(id=>s.territories[id].owner===uid).length/3),largest=bounded((counts[b.owner]||0)/maxCount),named=units.filter(u=>u.heroId).length/Math.max(1,units.length),ruler=Number(units.some(u=>u.sides===20));
-    const retaliation=Object.values(s.history||{}).some(e=>(e.result||e.battle)?.attacker===b.owner&&(e.result||e.battle)?.defender===uid&&at-e.at<AI_POLICY.spawnMs)?1:0;
+    const retaliation=Object.values(s.history||{}).some(e=>(e.result||e.battle)?.attacker===b.owner&&(e.result||e.battle)?.defender===uid&&at-e.at<7_200_000)?1:0;
     return {from:a.id,to:b.id,unitIds:ids(units),units,probability:p,threshold,sourceRisk,counterRisk,score:40*p.lower+10*value+8*links+6*largest+4*retaliation-25*sourceRisk-15*counterRisk-10*named-10*ruler,reason:'유리한 인접 전투'};
   }
   const tie=(key,a,b)=>hash32(`${s.seed}:${Math.floor(at/AI_POLICY.decisionMs)}:${key}:${a.from}:${a.to}`)-hash32(`${s.seed}:${Math.floor(at/AI_POLICY.decisionMs)}:${key}:${b.from}:${b.to}`);
