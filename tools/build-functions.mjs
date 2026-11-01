@@ -3,3 +3,4 @@ await build({stdin:{contents:"export * from './server/ai-live.js';export {loadAi
 
 await build({entryPoints:['server/record-versions.js'],outfile:'functions/record-versions.js',bundle:true,platform:'node',format:'esm',target:'node22'});
 await build({entryPoints:['server/rewards.js'],outfile:'functions/rewards.js',bundle:true,platform:'node',format:'esm',target:'node22'});
+await build({entryPoints:['server/reward-transaction.js'],outfile:'functions/reward-transaction.js',bundle:true,platform:'node',format:'esm',target:'node22'});

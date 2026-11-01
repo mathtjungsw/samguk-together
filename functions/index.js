@@ -5,6 +5,7 @@ import {onCall,HttpsError} from 'firebase-functions/v2/https';
 import {onValueWritten} from 'firebase-functions/v2/database';
 import {recordManifest,recordHash} from './record-versions.js';
 import {claimReward} from './rewards.js';
+import {rewardTransaction} from './reward-transaction.js';
 import {createHmac} from 'node:crypto';
 import {loadAiContext,advanceLiveAi,aiStartCount,previousRulerNames,encodeLiveAi,castAiBallot,aiElectors,createSeasonWorld,followingSeason,systemEvents,appendSystemMessages} from './game.js';
 initializeApp();const db=getDatabase();
@@ -58,5 +59,5 @@ export const rulerReward=onCall({...settings,invoker:'public'},async request=>{
  const uid=request.auth.uid,{ticketId,city}=request.data||{};if(!/^[\w-]{8,100}$/.test(ticketId||'')||typeof city!=='string'||city.length>100)throw new HttpsError('invalid-argument','보상과 도시를 확인해 주세요.');
  const ticketRef=db.ref('rewardTickets/'+uid+'/'+ticketId),ticket=(await ticketRef.get()).val();if(!ticket||ticket.uid!==uid||!/^season-\d+$/.test(ticket.season))throw new HttpsError('permission-denied','지급된 보상이 없습니다.');
  const key=process.env.AI_DICE_KEY;if(!key)throw new HttpsError('internal','서버 보상 설정을 확인해 주세요.');const random=createHmac('sha256',key).update('reward:'+uid+':'+ticketId).digest().readUInt32BE(0),worldRef=db.ref('worlds/'+ticket.season);let output;
- try{const result=await worldRef.transaction(raw=>{if(!raw)return;output=claimReward(raw,uid,ticket,city,Math.max(Date.now(),raw.updatedAt),random);return output.world;},undefined,false);if(!result.committed)throw Error('전황이 바뀌었습니다. 다시 시도해 주세요.');const s=result.snapshot.val(),claim=JSON.parse(s.rewardClaims)[ticketId];await ticketRef.update({status:'claimed',claim});const {historyFeed}=await import('./game.js');await db.ref('historyFeed/'+ticket.season).transaction(old=>old?.revision>s.revision?undefined:historyFeed(s));return claim;}catch(error){throw new HttpsError('failed-precondition',error.message||'보상을 받지 못했습니다. 사용권은 보존됩니다.');}
+ try{const result=await rewardTransaction(worldRef,raw=>{if(!raw)return;output=claimReward(raw,uid,ticket,city,Math.max(Date.now(),raw.updatedAt),random);return output.world;});if(!result.committed)throw Error('전황이 바뀌었습니다. 다시 시도해 주세요.');const s=result.snapshot.val(),claim=JSON.parse(s.rewardClaims)[ticketId];await ticketRef.update({status:'claimed',claim});const {historyFeed}=await import('./game.js');await db.ref('historyFeed/'+ticket.season).transaction(old=>old?.revision>s.revision?undefined:historyFeed(s));return claim;}catch(error){console.warn('reward-claim-failed',error.message);throw new HttpsError('failed-precondition',error.message||'보상을 받지 못했습니다. 사용권은 보존됩니다.');}
 });
