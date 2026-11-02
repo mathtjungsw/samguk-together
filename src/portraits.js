@@ -1,8 +1,11 @@
 import {MAP} from './engine.js';
 import NEXT from './data/hero-effects-next.json' with {type:'json'};
+import CAMPAIGN from './data/hero-effects-200.json' with {type:'json'};
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const byName=new Map(MAP.roster.map(hero=>[hero.name,hero]));
+const addedPortraits=new Map(CAMPAIGN.filter(e=>e.number>150).flatMap(e=>[[e.id,e],[e.name,e]]));
 export function portraitHTML(unit,className=''){
+  const added=addedPortraits.get(unit.heroId)||addedPortraits.get(unit.name);if(added){const i=added.number-151;return `<span class="portrait ${className}" role="img" aria-label="${escapeHTML(unit.name)} 초상" style="--portrait:url('./assets/portraits-151-200.webp');--portrait-x:${(i%10)*100/9}%;--portrait-y:${Math.floor(i/10)*25}%;background-size:1000% 500%"></span>`;}
   const extra=NEXT.find(e=>e.name===unit.name&&e.number>100);if(extra){const i=extra.number-101;return `<span class="portrait ${className}" role="img" aria-label="${escapeHTML(unit.name)} 초상" style="--portrait:url('./assets/portraits-next-50.webp');--portrait-x:${(i%10)*100/9}%;--portrait-y:${Math.floor(i/10)*25}%;background-size:1000% 500%"></span>`;}
   const hero=byName.get(unit.name),p=hero?.portrait;
   if(!p)return `<span class="portrait portrait-fallback d${unit.sides} ${className}" role="img" aria-label="${unit.sides===20?'플레이어 군주':'병력'} 표식">${unit.sides===20?'君':unit.sides===4?'兵':'將'}</span>`;

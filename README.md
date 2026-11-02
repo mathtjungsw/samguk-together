@@ -1,3 +1,7 @@
+## 2026-11-02 추가 무장50명 초상
+
+151~200번 무장50명의 창작 초상을 추가해200명 모두 표시한다. 기존150명은 보존하고 정적WebP 한 장을 모든 무장 화면에서 재사용한다. [작업 기록](docs/UPDATE_2026-11-02_PORTRAITS_200.md), [제작 프롬프트·명단](licenses/portraits-151-200.json).
+
 ## 2026-11-02 서버 속도 개선
 
 전투 상세는 불변 버전별 별도 경로와 전달 대기로 보존하고 현재 전장에는 요약만 유지한다. 기존 전장은 백업·ETag 확인 후 활성화하며 새 화면은 두 기록 형식을 지원한다. 반복 집계를 줄이고 명령 함수만CPU1로 설정하며 최소0·최대1·동시1을 유지한다. [작업 기록](docs/UPDATE_2026-11-02_SERVER_SPEED.md), [실행 계획](docs/DEVELOPMENT_PLAN_2026-11-02_SERVER_SPEED.md). 운영 이관은 `node tools/migrate-battle-records.mjs`, 승인된 업데이트 공지는 `node tools/publish-release.mjs`를 사용한다.
