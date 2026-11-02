@@ -1,5 +1,11 @@
 # 자료 출처 및 변경 고지
 
+## 추가 무장151~200 초상
+
+- 2026-11-02 OpenAI 내장image_gen/이미지 생성 스킬로 제작한 창작 인물 초상50개다.
+- `public/assets/portraits-151-200.webp`는10열×5행이며, 명단 번호151~200의 순서대로 사용한다. 생성PNG를WebP로 인코딩했다.
+- 프롬프트 전문과 제작 정보는 `licenses/portraits-151-200.json`에 있다. 삼국지 시리즈의 게임 자산을 복제·추출하지 않았다. 역사 인물의 실제 외모를 확정하는 자료가 아니다.
+
 지도 외곽은 André Ourednik 및 Historical Basemaps 기여자의 `world_200.geojson` Han 지형을 사용했습니다.
 
 - 원본: https://github.com/aourednik/historical-basemaps
