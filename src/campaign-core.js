@@ -1,6 +1,6 @@
 import {campaignEnabled,CAPTIVE,nextEscapeAt} from './campaign-policy.js';
 import {ownedTerritories,seededRandom,requireGame,MINUTE,byId} from './game-core.js';
-import {capacityOf,isLocked} from './engine-next.js';
+import {capacityOf,isLocked,refreshIndexes} from './engine-next.js';
 import {stampUnit} from './role-policy.js';
 import {defaultMaterials,acceptRansom} from './campaign-actions.js';
 let randomFor=key=>seededRandom(key)();
@@ -17,7 +17,12 @@ export function safeReturn(s,uid,u,city,at,delay=10){
  return dest?.id||'';
 }
 export function releaseCaptive(s,p,at,cause='release',city=''){
- const c=campaignState(s);delete c.captives[p.id];safeReturn(s,p.owner,p.unit,city,at);campaignEvent(s,p.id+'-'+cause,at,'captive',`${p.unit.name}(D${p.unit.sides}) · ${cause==='escape'?'탈출 성공':cause==='deadline'?'2시간 확정 탈출':'석방'} · ${s.players[p.owner].name} 군주에게 복귀합니다.`,{actor:p.owner,previousOwner:p.captor});
+ const c=campaignState(s);if(!c.captives[p.id])return;delete c.captives[p.id];
+ if(['escape','deadline'].includes(cause)&&!ownedTerritories(s,p.owner).length){
+  s.players[p.owner].deaths=(s.players[p.owner].deaths||0)+1;refreshIndexes(s);
+  campaignEvent(s,p.id+'-'+cause,at,'captive',`${p.unit.name}(D${p.unit.sides}) · ${cause==='deadline'?'2시간 확정 탈출':'탈출'} 후 복귀할 영토가 없어 전사했습니다. 해당 무장은 다시 등장할 수 있습니다.`,{actor:p.owner,previousOwner:p.captor});return;
+ }
+ safeReturn(s,p.owner,p.unit,city,at);campaignEvent(s,p.id+'-'+cause,at,'captive',`${p.unit.name}(D${p.unit.sides}) · ${cause==='escape'?'탈출 성공':cause==='deadline'?'2시간 확정 탈출':'석방'} · ${s.players[p.owner].name} 군주에게 복귀합니다.`,{actor:p.owner,previousOwner:p.captor});
 }
 export function settleCampaign(s,at){
  if(!campaignEnabled(s)||s.season.endedAt)return;const c=campaignState(s);normalizeCampaign(s);const limit=Math.min(at,(s.season.deadline||Infinity)-1);
