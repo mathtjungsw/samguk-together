@@ -1,3 +1,5 @@
+import {releaseIsKnown} from './release-policy.js';
+import {renderCommandPanel} from './stable-panel.js';
 import {campaignEnabled} from './campaign-policy.js';
 import {missionCardHTML,bountyHTML,captivesHTML,captiveActionHTML,battleBondHTML} from './campaign-ui.js';
 import {enhancementHTML,enhancementBadge,infantryEnhancementHTML} from './enhancement-ui.js';
@@ -99,11 +101,11 @@ function renderSide(){if(uid&&(world.featureVersion<4||world.maintenance)){$('co
   if(needsRulerName()){$('command-content').innerHTML='<div class="empty-selection"><h3>군주 이름을 정해 주세요.</h3><p>정한 이름으로 전장과 채팅에 참여합니다.</p><button id="choose-name" class="primary-button">군주 이름 정하기</button></div>';return;}
   const player=view.players[uid],mine=ownedTerritories(view,uid);let before=requestCards()+bountyHTML(view)+missionCardHTML(view,uid,store?.missionState,busy,store?.pendingCampaign?.());
   if(!mine.length&&player.life>0){const remain=restartAvailableAt(player)-now;before+=`<div class="start-protection">마지막 영토를 잃었습니다.<br>${remain>0?'다시 시작까지 <strong>'+clockText(remain)+'</strong>':'다시 깃발을 올릴 수 있습니다. 무작위 영토에서 시작하세요.'}</div>`;}
-  if(!t&&mine.length){$('command-content').innerHTML=before+cityListHTML(view,uid,now,cityFilter);return;}
-  if(!t){$('command-content').innerHTML=before+`<div class="empty-selection">${courtArt()}<h3>${mine.length?'어디로 진군하시겠습니까?':'어디에 깃발을 올릴까요?'}</h3><p>${mine.length?'내 영토를 고르고 출전 병력을 선택한 뒤<br>인접한 목적지를 선택하세요.':'아래 버튼으로 무작위 영토에서 시작하세요.<br>중립이 없으면 영토 수 1위의 영토를 배정합니다.'}</p></div>`;return;}
+  if(!t&&mine.length){renderCommandPanel($('command-content'),before,cityListHTML(view,uid,now,cityFilter));return;}
+  if(!t){renderCommandPanel($('command-content'),before,`<div class="empty-selection">${courtArt()}<h3>${mine.length?'어디로 진군하시겠습니까?':'어디에 깃발을 올릴까요?'}</h3><p>${mine.length?'내 영토를 고르고 출전 병력을 선택한 뒤<br>인접한 목적지를 선택하세요.':'아래 버튼으로 무작위 영토에서 시작하세요.<br>중립이 없으면 영토 수 1위의 영토를 배정합니다.'}</p></div>`);return;}
   const rank=RANKS[placeInfo(source).rank],own=t.owner===uid,protection=t.protectionUntil>now;
   const pending=Object.values(view.requests).filter(r=>r.applicant===uid&&r.status==='pending');
-  $('command-content').innerHTML=before+`<button class="text-button" data-city-list>← 내 도시 목록</button><div class="territory-heading"><h3>${esc(placeInfo(source).ko)}</h3><span class="rank-badge">${rank.name}</span></div><p class="territory-owner">${t.owner?'군주 <strong>'+esc(playerName(t.owner))+'</strong>':'<strong>중립 수비대</strong>'}${own?' · 내 영토':''}</p><div class="territory-stats"><span>주둔 병력<strong>${t.units.length} / ${capacityOf(t.id,view,now)}</strong></span><span>인접 영토<strong>${MAP.layout.cells.find(c=>c.id===source).neighbors.length}곳</strong></span><span>다음 행동<strong>${own?(t.actionReadyAt>now?clockText(t.actionReadyAt-now):'지금 가능'):'—'}</strong></span><span>다음 충원<strong>${t.owner?(nextRecruitAt(t)?clockText(nextRecruitAt(t)-now):'정원 도달'):'없음'}</strong></span></div>${protection?`<div class="start-protection">시작 보호 ${clockText(t.protectionUntil-now)} 남음${own?'<br>먼저 공격하면 보호가 해제됩니다.':''}</div>`:''}${revivalButton(t,own)}${own&&enhancementEnabled(view)?'<button class="secondary-button" data-city-enhance>병력 강화 · 도시 행동 소모 없음</button>':''}${roster(t,own)}${own?roleControlsHTML(view,t,now,busy):''}${own?'<p class="cooldown-note">장수만 이동: 개인 10분 대기 · 공격/병사 동반: 영토 10분 대기</p>':''}${pending.length?pending.map(r=>`<p class="pending-note">${esc(placeInfo(r.territoryId).ko)} 양도 승인 기다리는 중</p>`).join(''):''}`;
+  renderCommandPanel($('command-content'),before,`<button class="text-button" data-city-list>← 내 도시 목록</button><div class="territory-heading"><h3>${esc(placeInfo(source).ko)}</h3><span class="rank-badge">${rank.name}</span></div><p class="territory-owner">${t.owner?'군주 <strong>'+esc(playerName(t.owner))+'</strong>':'<strong>중립 수비대</strong>'}${own?' · 내 영토':''}</p><div class="territory-stats"><span>주둔 병력<strong>${t.units.length} / ${capacityOf(t.id,view,now)}</strong></span><span>인접 영토<strong>${MAP.layout.cells.find(c=>c.id===source).neighbors.length}곳</strong></span><span>다음 행동<strong>${own?(t.actionReadyAt>now?clockText(t.actionReadyAt-now):'지금 가능'):'—'}</strong></span><span>다음 충원<strong>${t.owner?(nextRecruitAt(t)?clockText(nextRecruitAt(t)-now):'정원 도달'):'없음'}</strong></span></div>${protection?`<div class="start-protection">시작 보호 ${clockText(t.protectionUntil-now)} 남음${own?'<br>먼저 공격하면 보호가 해제됩니다.':''}</div>`:''}${revivalButton(t,own)}${own&&enhancementEnabled(view)?'<button class="secondary-button" data-city-enhance>병력 강화 · 도시 행동 소모 없음</button>':''}${roster(t,own)}${own?roleControlsHTML(view,t,now,busy):''}${own?'<p class="cooldown-note">장수만 이동: 개인 10분 대기 · 공격/병사 동반: 영토 10분 대기</p>':''}${pending.length?pending.map(r=>`<p class="pending-note">${esc(placeInfo(r.territoryId).ko)} 양도 승인 기다리는 중</p>`).join(''):''}`);
 }
 function renderFooter(){
   $('command-footer').hidden=sideTab!=='command';if(sideTab!=='command')return;
@@ -145,11 +147,11 @@ function observeNews(s){
 function queueSettlement(){
   if(store?.mode!=='practice'&&(!worldWritable(store?.config?.worldId||activeWorld(currentTime()),currentTime())||world.featureVersion===4&&!hasDueRecruitment(world,currentTime())))return;
   if(world.featureVersion<4||world.maintenance||settling||busy||!uid||!canWrite(store)||(!world.players[uid]||needsRulerName())&&!seasonClosed(world,currentTime())||document.hidden||Date.now()<nextSettlementTry)return;
-  if(world.season?.endedAt)return;if(world.release?.id===RELEASE.id&&world.featureVersion>=4&&!hasDueRecruitment(world,currentTime())&&!seasonClosed(world,currentTime())&&(store?.mode==='practice'||world.season))return;
+  if(world.season?.endedAt)return;if(releaseIsKnown(world,RELEASE.id)&&world.featureVersion>=4&&!hasDueRecruitment(world,currentTime())&&!seasonClosed(world,currentTime())&&(store?.mode==='practice'||world.season))return;
   settling=true;setTimeout(async()=>{try{
     if(!canWrite(store)||busy)return;
-    if(world.release?.id===RELEASE.id&&!hasDueRecruitment(world,currentTime())&&!seasonClosed(world,currentTime())&&(store?.mode==='practice'||world.season))return;
-    await store.submit(seasonClosed(world,currentTime())||world.featureVersion===4||world.release?.id===RELEASE.id?{type:'recruit'}:{type:'announce',id:RELEASE.id});
+    if(releaseIsKnown(world,RELEASE.id)&&!hasDueRecruitment(world,currentTime())&&!seasonClosed(world,currentTime())&&(store?.mode==='practice'||world.season))return;
+    await store.submit(seasonClosed(world,currentTime())||world.featureVersion===4||releaseIsKnown(world,RELEASE.id)?{type:'recruit'}:{type:'announce',id:RELEASE.id});
   }catch(error){nextSettlementTry=Date.now()+30_000;toast(firebaseMessage(error));}finally{settling=false;}},150+Math.random()*700);
 }
 function renderInfoPanel(){
