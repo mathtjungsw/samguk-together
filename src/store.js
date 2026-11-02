@@ -1,4 +1,5 @@
 import {campaignEnabled,FIRST_CAMPAIGN_SEASON,isRetiredMissionCommand} from './campaign-policy.js';
+import {campaignRequestState} from './campaign-pending.js';
 import {recordCache} from './record-cache.js';
 import {WorldReader,historyFeed} from './world-data.js';
 const indexEntry=result=>({id:result.id,title:result.title,endedAt:result.endedAt});
@@ -33,10 +34,34 @@ export class FirebaseStore {
   constructor(config){this.config=config;this.uid=null;this.world=null;this.chat=null;this.mode='online';this.connected=false;this.worldReady=false;this.chatReady=false;this.offset=0;this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.stops=[];this.pendingId=null;}
   now(){return Date.now()+this.offset;}
   campaignKey(){return 'samguk-campaign-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
-  pendingCampaign(){let pending=this.campaignPending||null;try{pending=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null')||pending;}catch{}if(isRetiredMissionCommand(pending?.type)){this.saveCampaignPending(null);return null;}return pending;}
+  pendingCampaign(){let pending=this.campaignPending||null;try{pending=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null')||pending;}catch{}if(pending&&(isRetiredMissionCommand(pending.type)||pending.worldId&&pending.worldId!==this.config.worldId||campaignRequestState(this.world,this.uid,pending,this.config.worldId)!=='unknown')){this.clearCampaignPending(pending);return null;}return pending;}
   saveCampaignPending(req){this.campaignPending=req;try{if(req)globalThis.localStorage?.setItem(this.campaignKey(),JSON.stringify(req));else globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
   async callCampaign(name,data){const f=await import('firebase/functions');return (await f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),name)(data)).data;}
-  async performCampaign(spec){const pending=this.pendingCampaign();if(pending&&pending.id!==spec.id)throw Error('이전 명령의 결과를 먼저 확인해 주세요.');const request=pending||{...spec,seq:this.world.players[this.uid]?.commandSeq||0,worldId:this.config.worldId};this.saveCampaignPending(request);try{const data=await this.callCampaign('campaignOrder',request);await this.retryRead();this.saveCampaignPending(null);return {...data,world:this.world};}catch(error){await this.retryRead().catch(()=>{});if(this.world?.receipts?.[request.id]){this.saveCampaignPending(null);return {world:this.world,event:this.world.history?.[request.id]||null,result:{id:request.id,already:true}};}if(error.details?.definiteRejection||/invalid-argument|unauthenticated|permission-denied/.test(error.code||''))this.saveCampaignPending(null);throw error;}}
+  clearCampaignPending(request){if(this.campaignPending?.id===request.id)this.campaignPending=null;try{const saved=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null');if(saved?.id===request.id)globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
+  campaignRecovered(request,state){this.clearCampaignPending(request);if(state==='superseded')throw new GameError('이전 명령 확인을 정리했습니다. 최신 전황에서 병력을 다시 선택해 주세요.','STALE_COMMAND');return {world:this.world,event:this.world.history?.[request.id]||null,result:{id:request.id,...(state==='confirmed'?{already:true}:{notReplayable:true})}};}
+  async recoverCampaign(){return this.serialize(async()=>{const pending=this.pendingCampaign();if(!pending)return {world:this.world,result:{checked:true}};try{return await this.performCampaign(pending);}catch(error){if(error.code==='STALE_COMMAND')return {world:this.world,result:{notReplayable:true}};throw error;}});}
+  async performCampaign(spec){
+    if(spec.worldId&&spec.worldId!==this.config.worldId)throw new GameError('이전 시즌의 명령은 다시 실행할 수 없습니다.','STALE_COMMAND');
+    let state=campaignRequestState(this.world,this.uid,spec,this.config.worldId);
+    if(state!=='unknown')return this.campaignRecovered(spec,state);
+    let pending=this.pendingCampaign();
+    // Recovery first observes the latest committed state. Never change the ID
+    // or sequence of an uncertain request to make an old attack run again.
+    if(pending){await this.retryRead();state=campaignRequestState(this.world,this.uid,pending,this.config.worldId);if(state!=='unknown'){if(pending.id===spec.id)return this.campaignRecovered(pending,state);this.clearCampaignPending(pending);pending=null;}else if(pending.id!==spec.id)throw Error('이전 명령의 결과를 먼저 확인해 주세요.');}
+    const request=pending||{...spec,seq:this.world.players[this.uid]?.commandSeq||0,worldId:this.config.worldId};this.saveCampaignPending(request);
+    let data;
+    try{data=await this.callCampaign('campaignOrder',request);}
+    catch(error){
+      if(error.details?.definiteRejection||/invalid-argument|unauthenticated|permission-denied/.test(error.code||''))this.clearCampaignPending(request);
+      await this.retryRead().catch(()=>{});state=campaignRequestState(this.world,this.uid,request,this.config.worldId);
+      if(state!=='unknown')return this.campaignRecovered(request,state);
+      throw error;
+    }
+    // Callable success confirms the write independently of a later read error.
+    this.clearCampaignPending(request);
+    let syncPending=false;try{await this.retryRead();}catch{syncPending=true;}
+    return {...data,world:this.world,...(syncPending?{syncPending:true}:{})};
+  }
   campaignAction(spec){return this.serialize(()=>this.performCampaign({...spec,id:spec.id||commandId()}));}
   async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
   async claimReward(ticketId,city){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
