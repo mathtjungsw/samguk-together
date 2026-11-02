@@ -4,7 +4,7 @@ export function defaultEnhancementMaterials(t,targetId,at){const u=t?.units.find
 export function enhancementPlan(s,uid,req,at){
  requireGame(enhancementEnabled(s),'병력 강화는 시즌 5부터 사용할 수 있습니다.');
  requireGame(!seasonClosed(s,at),'종료된 시즌에서는 강화할 수 없습니다.');const t=s.territories[req.city];requireGame(t?.owner===uid&&!isLocked(s,req.city),'전투 중이 아닌 내 도시를 선택해 주세요.');
- const u=t.units.find(x=>x.id===req.unitId);requireGame(u,'강화 대상이 현재 도시에 없습니다.');requireGame(levelOf(u)<ENHANCEMENT.maxLevel,'이미 최대 +3 강화입니다.');requireGame(u.readyAt<=at&&u.moveReadyAt<=at,'대상 병력의 기존 행동·이동 대기가 남아 있습니다.');
+ const u=t.units.find(x=>x.id===req.unitId);requireGame(u,'강화 대상이 현재 도시에 없습니다.');requireGame(levelOf(u)<ENHANCEMENT.maxLevel,'이미 최대 +3 강화입니다.');
  const cost=enhanceCost(u),ids=req.materialIds;requireGame(Array.isArray(ids)&&ids.length===cost&&new Set(ids).size===cost,'필요한 기본 D4 재료를 확인해 주세요.');const material=ids.map(id=>t.units.find(x=>x.id===id));requireGame(material.every(x=>x&&x.id!==u.id&&x.sides===4&&!levelOf(x)),'같은 도시의 0강 D4만 기본 재료로 쓸 수 있습니다. 행동 대기 중인 병사도 사용할 수 있습니다.');
  let booster=null;if(req.boosterId){booster=t.units.find(x=>x.id===req.boosterId);requireGame(booster&&booster.id!==u.id&&!ids.includes(booster.id)&&[6,8,12].includes(booster.sides),'같은 도시의 D6·D8·D12 중 다른 병력 1명을 선택해 주세요. 대기 중인 장수도 재료로 사용할 수 있습니다.');}
  requireGame(t.units.length-cost-Number(!!booster)-1>=1,'재료와 강화 대상 외에 주둔 병력 1명을 남겨 주세요.');return {t,u,cost,material,booster,chance:enhanceChance(u,booster),failureLimit:ENHANCEMENT.failures[u.sides]};
