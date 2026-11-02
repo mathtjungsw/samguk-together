@@ -38,9 +38,27 @@ export class FirebaseStore {
   saveCampaignPending(req){this.campaignPending=req;try{if(req)globalThis.localStorage?.setItem(this.campaignKey(),JSON.stringify(req));else globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
   async callCampaign(name,data){const f=await import('firebase/functions');return (await f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),name)(data)).data;}
   clearCampaignPending(request){if(this.campaignPending?.id===request.id)this.campaignPending=null;try{const saved=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null');if(saved?.id===request.id)globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
+  syncKey(){return this.campaignKey()+':confirmed';}
+  campaignSyncPending(){
+    let p=this.confirmedSync;try{p=JSON.parse(globalThis.localStorage?.getItem(this.syncKey())||'null')||p;}catch{}
+    if(!p)return false;
+    const same=p.worldId===this.config.worldId&&this.world?.season?.id===p.worldId;
+    const proven=same&&campaignRequestState(this.world,this.uid,p,p.worldId)!=='unknown'&&(!Number.isInteger(p.revision)||this.world.revision>=p.revision);
+    if(proven||p.worldId!==this.config.worldId){this.confirmedSync=null;clearTimeout(this.syncTimer);try{globalThis.localStorage?.removeItem(this.syncKey());}catch{}return false;}
+    this.confirmedSync=p;return true;
+  }
+  beginCampaignSync(request,commit,urgent=false){
+    this.confirmedSync={id:request.id,seq:request.seq,worldId:request.worldId,...(commit?.worldId===request.worldId&&commit.id===request.id?{revision:commit.revision}:{})};
+    try{globalThis.localStorage?.setItem(this.syncKey(),JSON.stringify(this.confirmedSync));}catch{}
+    clearTimeout(this.syncTimer);if(!this.campaignSyncPending())return;
+    const scope=this.config.worldId;
+    const check=async(attempt)=>{if(this.closed||scope!==this.config.worldId||!this.campaignSyncPending())return;try{await this.retryRead({worldOnly:true});}catch{}if(this.closed||scope!==this.config.worldId)return;if(this.campaignSyncPending()&&attempt<2){this.syncTimer=setTimeout(()=>check(attempt+1),attempt===0?2000:5000);this.syncTimer.unref?.();}this.onConnection(this.connected);};
+    this.syncTimer=setTimeout(()=>check(0),urgent?0:500);this.syncTimer.unref?.();
+  }
   campaignRecovered(request,state){this.clearCampaignPending(request);if(state==='superseded')throw new GameError('이전 명령 확인을 정리했습니다. 최신 전황에서 병력을 다시 선택해 주세요.','STALE_COMMAND');return {world:this.world,event:this.world.history?.[request.id]||null,result:{id:request.id,...(state==='confirmed'?{already:true}:{notReplayable:true})}};}
   async recoverCampaign(){return this.serialize(async()=>{const pending=this.pendingCampaign();if(!pending)return {world:this.world,result:{checked:true}};try{return await this.performCampaign(pending);}catch(error){if(error.code==='STALE_COMMAND')return {world:this.world,result:{notReplayable:true}};throw error;}});}
   async performCampaign(spec){
+    if(this.campaignSyncPending())throw new GameError('명령은 완료됐습니다. 최신 전황을 확인한 뒤 다시 시도해 주세요.','SYNC_PENDING');
     if(spec.worldId&&spec.worldId!==this.config.worldId)throw new GameError('이전 시즌의 명령은 다시 실행할 수 없습니다.','STALE_COMMAND');
     let state=campaignRequestState(this.world,this.uid,spec,this.config.worldId);
     if(state!=='unknown')return this.campaignRecovered(spec,state);
@@ -59,12 +77,12 @@ export class FirebaseStore {
     }
     // Callable success confirms the write independently of a later read error.
     this.clearCampaignPending(request);
-    let syncPending=false;try{await this.retryRead();}catch{syncPending=true;}
-    return {...data,world:this.world,...(syncPending?{syncPending:true}:{})};
+    this.beginCampaignSync(request,data.commit,!!data.guardPending);
+    return {...data,world:this.world,...(this.campaignSyncPending()?{syncPending:true}:{})};
   }
   campaignAction(spec){return this.serialize(()=>this.performCampaign({...spec,id:spec.id||commandId()}));}
   async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
-  async claimReward(ticketId,city){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
+  async claimReward(ticketId,city){if(!canWrite(this))throw Error('최신 전황을 확인한 뒤 시도해 주세요.');const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
   enhancementKey(){return 'samguk-enhancement-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
   pendingEnhancement(){try{const p=JSON.parse(globalThis.localStorage?.getItem(this.enhancementKey())||'null');return p&&p.worldId===this.config.worldId&&typeof p.id==='string'?p:null;}catch{return null;}}
   enhanceArmy(spec){return this.serialize(async()=>{if(!canWrite(this))throw Error('최신 전황을 다시 연결한 뒤 시도해 주세요.');const req=this.pendingEnhancement()||{...spec,worldId:this.config.worldId};try{globalThis.localStorage?.setItem(this.enhancementKey(),JSON.stringify(req));}catch{}try{const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'enhanceArmy'),result=(await call(req)).data;await this.retryRead();try{globalThis.localStorage?.removeItem(this.enhancementKey());}catch{}return result;}catch(error){if(error.details?.committed===false||/invalid-argument|unauthenticated|permission-denied/.test(error.code||'')){try{globalThis.localStorage?.removeItem(this.enhancementKey());}catch{}}throw error;}});}
@@ -138,7 +156,19 @@ export class FirebaseStore {
     // ruler name separately before a profile is registered or migrated.
     if(this.config.seasons&&this.world.featureVersion===6&&!this.world.players[this.uid]&&this.publicName&&!seasonClosed(this.world,this.now())){await this.retryRead();await this.submit({type:'register',name:this.publicName});}this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
   }
-  async retryRead(){if(this.reading)return this.reading;this.reading=(async()=>{try{const [w,c]=await Promise.all([this.config.compactSync?this.readWorldAt(this.config.worldId||'main'):this.sdk.get(this.ref).then(s=>s.val()),this.sdk.get(this.chatRef)]);const world=normalizeWorld(w);this.world=world;this.observed=world;this.chat=c.val();this.worldReady=true;this.chatReady=true;this.onWorld(world);this.onChat(this.chat);this.onConnection(this.connected);}catch(error){this.worldReady=false;this.chatReady=false;this.onConnection(false,firebaseMessage(error));throw error;}finally{this.reading=null;}})();return this.reading;}
+  async retryRead({worldOnly=false}={}){
+    if(this.reading){await this.reading;if(!worldOnly&&!this.chatReady)return this.retryRead();return;}
+    const scope=this.config.worldId;
+    this.reading=(async()=>{try{
+      const [w,c]=await Promise.all([this.config.compactSync?this.readWorldAt(scope||'main'):this.sdk.get(this.ref).then(s=>s.val()),worldOnly?Promise.resolve(null):this.sdk.get(this.chatRef)]);
+      if(this.closed||scope!==this.config.worldId)return;
+      const world=normalizeWorld(w);
+      if(!this.world||this.world.season?.id!==world.season?.id||world.revision>=this.world.revision){this.world=world;this.observed=world;}
+      this.worldReady=true;this.campaignSyncPending();
+      if(c){this.chat=c.val();this.chatReady=true;this.onChat(this.chat);}
+      this.onWorld(this.world);this.onConnection(this.connected);
+    }catch(error){if(!this.closed&&scope===this.config.worldId){this.worldReady=false;if(!worldOnly)this.chatReady=false;this.onConnection(false,worldOnly&&this.campaignSyncPending()?'명령은 완료됐습니다. 최신 전황을 확인 중입니다.':firebaseMessage(error));}throw error;}finally{this.reading=null;}})();return this.reading;
+  }
   submit(spec){return this.serialize(()=>this.performCommand(spec));}
   async performCommand(spec){
     if(seasonClosed(this.world,this.now())&&(this.world.season?.endedAt||spec.type!=='recruit'))throw new GameError('시즌이 종료되었습니다. 최종 결과를 확인해 주세요.','SEASON_CLOSED');
@@ -187,7 +217,7 @@ export class FirebaseStore {
     if(!result.committed)throw blocked||new GameError('채팅을 보내지 못했어요. 다시 시도해 주세요.');
     this.chat=result.snapshot.val();this.onChat(this.chat);
   }
-  async close({signOut=false}={}){this.readers?.forEach(r=>r.close());this.reader?.close();this.stops.forEach(stop=>stop());this.stops=[];if(signOut&&this.auth)await this.authSdk.signOut(this.auth);this.connected=false;}
+  async close({signOut=false}={}){this.closed=true;clearTimeout(this.syncTimer);this.readers?.forEach(r=>r.close());this.reader?.close();this.stops.forEach(stop=>stop());this.stops=[];if(signOut&&this.auth)await this.authSdk.signOut(this.auth);this.connected=false;}
 }
 
 export function firebaseMessage(error){const code=String(error?.code||'');if(/popup-closed|cancelled-popup/.test(code))return '로그인 창을 닫았어요. 다시 로그인할 수 있습니다.';if(/unauthorized-domain/.test(code))return '이 접속 주소에서 구글 로그인을 사용할 수 있도록 전장 연결을 준비하고 있어요.';if(/operation-not-allowed/.test(code))return '구글 로그인 연결이 아직 준비되지 않았어요.';if(/permission|PERMISSION/.test(code)||/permission_denied/i.test(error?.message||''))return '명령을 저장하지 못했어요. 최신 전황과 접속 권한을 확인해 주세요.';if(/network/.test(code))return '인터넷 연결을 확인해 주세요.';return error?.message||'전장에 연결하지 못했어요.';}
