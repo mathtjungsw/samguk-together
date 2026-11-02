@@ -1,5 +1,5 @@
 import {renderCommandPanel} from '../src/stable-panel.js';
-import {missionCardHTML} from '../src/campaign-ui.js';
+import {missionCardHTML,commandCampaignHTML} from '../src/campaign-ui.js';
 import {createSeasonWorld} from '../src/seasons.js';
 import {campaignCommand} from '../server/campaign-command.js';
 import {missionOptions,selectMission} from '../src/campaign-actions.js';
@@ -19,5 +19,5 @@ try{
  for(let i=0;i<10;i++){s.revision++;renderCommandPanel(root,chosenHTML(),body('09:'+String(45-i).padStart(2,'0')));}
  check(root.querySelector('.campaign-card')===rewards,'관련 없는 전황 갱신에도 목표 카드 유지');check(root.querySelector('#campaign-reward-city')===select&&select.value===other.id&&document.activeElement===select,'보상 도시 선택과 포커스 유지');
  root.innerHTML='<p>포로 탭</p>';renderCommandPanel(root,chosenHTML(),body('09:35'));check(root.querySelector('#campaign-reward-city'),'다른 탭을 다녀온 뒤 목표 카드 복구');
- document.querySelector('#status').textContent='8개 검사 통과 · 운영 데이터 연결 없음';document.documentElement.dataset.testResult='passed';
+ renderCommandPanel(root,commandCampaignHTML(s,null,false),body('09:34'));check(!root.querySelector('.campaign-card')&&!root.querySelector('[data-mission-choice]')&&!root.querySelector('#campaign-reward-city'),'영토·명령 영역에는 목표/보상 카드 없음');renderCommandPanel(root,commandCampaignHTML(s,{id:'pending-command'},false),body('09:33'));check(root.querySelector('[data-campaign-retry]'),'목표를 분리해도 미확인 명령 재시도 가능');document.querySelector('#status').textContent=output.children.length+'개 검사 통과 · 운영 데이터 연결 없음';document.documentElement.dataset.testResult='passed';
 }catch(error){document.querySelector('#status').textContent='FAIL · '+error.message;document.documentElement.dataset.testResult='failed';console.error(error);}
