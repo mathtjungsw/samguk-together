@@ -5,6 +5,7 @@ export function historySummary(e){
   const row={};for(const k of ['id','at','actor','type','text','from','to','previousOwner'])if(e[k]!==undefined&&e[k]!==null)row[k]=e[k];
   if(list(e.heroes).length||e.heroMove)row.heroMove=true;
   if(e.battle)row.battle=structuredClone(e.battle);
+  if(e.detailVersion)row.detailVersion=e.detailVersion;
   if(e.type==='battle'&&e.result){const r=e.result,b={};for(const k of ['attacker','defender','won','score','defense','friendly'])if(r[k]!==undefined)b[k]=r[k];b.escaped=list(r.escaped).length>0;if(r.policy){b.grade=r.policy.grade;b.delta=r.policy.delta;}row.battle=b;}
   return row;
 }
@@ -60,10 +61,13 @@ export class WorldReader{
     }finally{this.flushing=false;}
   }
   async detail(id){const key='battle:'+this.id+':'+id,summary=this.feed?.events?.[id]||this.raw.history?.[id],signature=summary?JSON.stringify(summary):'';let version;
-    try{version=await this.get('recordVersions/'+this.id+'/battles/'+id)||'no-stamp';version+=':'+signature;}catch(error){const offline=await this.cache?.get(key,undefined);if(offline?.result)return {...offline,localUnverified:true};throw Error('기록의 최신 상태를 확인하지 못했습니다. 연결 후 다시 열어 주세요.');}
+    try{version=summary?.detailVersion||await this.get('recordVersions/'+this.id+'/battles/'+id)||'no-stamp';version+=':'+signature;}catch(error){const offline=await this.cache?.get(key,undefined);if(offline?.result)return {...offline,localUnverified:true};throw Error('기록의 최신 상태를 확인하지 못했습니다. 연결 후 다시 열어 주세요.');}
     const held=this.details.get(id);if(held?.version===version)return structuredClone(held.data);
     const saved=await this.cache?.get(key,version);if(saved?.id===id&&saved.result&&Array.isArray(saved.result.attack)&&Array.isArray(saved.result.defend)&&Number.isFinite(saved.result.score)){this.details.set(id,{version,data:saved});return structuredClone(saved);}
-    const e=await this.get('worlds/'+this.id+'/history/'+id);if(!e?.result)throw Error('이 전투의 상세 기록이 보관 범위를 벗어났습니다.');
+    let e;
+    if(summary?.detailVersion){const path='battleRecords/'+this.id+'/'+id+'/'+summary.detailVersion;e=await this.get(path);if(!e?.result)e=await this.get('worlds/'+this.id+'/recordOutbox/'+summary.detailVersion+'/event');if(!e?.result)e=await this.get(path);}
+    else{e=await this.get('worlds/'+this.id+'/history/'+id);if(e?.detailVersion&&!e.result)e=await this.get('battleRecords/'+this.id+'/'+id+'/'+e.detailVersion)||await this.get('worlds/'+this.id+'/recordOutbox/'+e.detailVersion+'/event');}
+    if(!e?.result)throw Error('이 전투의 상세 기록이 보관 범위를 벗어났습니다.');
     if(!this.raw.pendingBattles?.[id])await this.cache?.put(key,version,e);this.details.set(id,{version,data:e});if(this.details.size>12)this.details.delete(this.details.keys().next().value);return structuredClone(e);
   }
   close(){this.closed=true;clearTimeout(this.timer);clearTimeout(this.legacyTimer);this.stops.forEach(s=>s());this.stops=[];this.details.clear();}

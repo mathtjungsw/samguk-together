@@ -5,7 +5,7 @@ import {onCall,HttpsError} from 'firebase-functions/v2/https';
 import {onValueWritten} from 'firebase-functions/v2/database';
 import {recordManifest,recordHash} from './record-versions.js';
 import {claimReward} from './rewards.js';
-import {rewardTransaction} from './reward-transaction.js';
+import {rewardTransaction,packBattleRecords,publishBattleRecords,committedBattleEvent} from './reward-transaction.js';
 import {applyEnhancement} from './enhancement.js';
 import {campaignCommand,settlementAfterRejectedAction,isRetiredMissionCommand,MISSIONS_REMOVED_MESSAGE,configureCampaignRandom,campaignEnabled,FIRST_CAMPAIGN_SEASON} from './campaign.js';
 import {createHmac} from 'node:crypto';
@@ -31,13 +31,13 @@ async function tick(){
   if(!initial)return {status:'missing'};
   let historicalReads=0;const {names,count}=await loadAiContext(path=>{historicalReads++;return db.ref(path).get().then(s=>s.val());},initial);
   const at=Math.max(Date.now(),initial.updatedAt),next=advanceLiveAi(initial,{at,firstSeason,names,count,seedFor:event=>createHmac('sha256',key).update(event).digest().readUInt32BE(0)});
-  if(next.revision===initial.revision)return {status:'not-due'};
+  if(next.revision===initial.revision){try{await publishBattleRecords(ref,initial);}catch{console.warn('ai-battle-record-publication-pending');}return {status:'not-due'};}
   // A single conditional commit exposes no intermediate AI decisions. On conflict defer, do not replay old attacks.
   next.revision=initial.revision+1;next.updatedAt=at;next.command={...next.command,id:'ai-server-'+id+'-'+Math.floor(at/600000),actor:'ai-system',type:'aiBatch',baseRevision:initial.revision,at};
-  const result=await ref.transaction(old=>old?.revision===initial.revision?encodeLiveAi(next):undefined,undefined,false);
-  if(!result.committed)return {status:'conflict'};
+  const packed=packBattleRecords(encodeLiveAi(next),initial);const result=await ref.transaction(old=>old?.revision===initial.revision?packed:undefined,undefined,false);
+  if(!result.committed)return {status:'conflict'};try{await publishBattleRecords(ref,result.snapshot.val());}catch{console.warn('ai-battle-record-publication-pending');}
   // Legacy clients use canonical history if this projection temporarily lags.
-  const {historyFeed}=await import('./game.js');const manifest=recordManifest(next);await db.ref('recordVersions/'+id).transaction(old=>!old||old.revision<=manifest.revision?manifest:undefined);await db.ref('historyFeed/'+id).transaction(old=>old?.revision>next.revision?undefined:historyFeed(next));const events=systemEvents(initial,next);if(events.length)await db.ref('chat/'+id).transaction(raw=>appendSystemMessages(raw,events,'ai-system',at));
+  const {historyFeed}=await import('./game.js');const manifest=recordManifest(packed);await db.ref('recordVersions/'+id).transaction(old=>!old||old.revision<=manifest.revision?manifest:undefined);await db.ref('historyFeed/'+id).transaction(old=>old?.revision>next.revision?undefined:historyFeed(packed));const events=systemEvents(initial,next);if(events.length)await db.ref('chat/'+id).transaction(raw=>appendSystemMessages(raw,events,'ai-system',at));
   if(next.season.endedAt)await db.ref('seasonIndex/'+id).set({id,title:next.season.result.title,endedAt:next.season.endedAt});
   return {status:'updated',season:id,revision:next.revision,historicalReads};
  }finally{ref.off('value',callback);}
@@ -78,13 +78,13 @@ export const campaignOpen=onCall({...settings,invoker:'public'},async request=>{
  await db.ref('worlds/'+id).transaction(raw=>raw||createSeasonWorld(number,opening.startAt,'samguk-'+id));return {id,number};
 });
 
-export const campaignOrder=onCall({...settings,invoker:'public'},async request=>{
+export const campaignOrder=onCall({...settings,cpu:1,invoker:'public'},async request=>{
  if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');const uid=request.auth.uid,{worldId,...input}=request.data||{};
  if(isRetiredMissionCommand(input.type))throw new HttpsError('failed-precondition',MISSIONS_REMOVED_MESSAGE,{definiteRejection:true});
  if(!/^season-[1-9][0-9]*$/.test(worldId||'')||JSON.stringify(input).length>24000||!/^[\w-]{8,90}$/.test(input.id||''))throw new HttpsError('invalid-argument','명령을 확인해 주세요.');const key=process.env.AI_DICE_KEY;if(!key)throw new HttpsError('internal','서버 설정을 확인해 주세요.');const rng=tag=>createHmac('sha256',key).update(tag).digest().readUInt32BE(0)/4294967296;configureCampaignRandom(rng);
  const worldRef=db.ref('worlds/'+worldId);
  if(!Number.isInteger(input.seq)||input.seq<0)throw new HttpsError('invalid-argument','명령 순번을 확인해 주세요.');let output,rejected=null;const clock=performance.now(),timing={};const draw=Math.floor(rng('command:'+worldId+':'+uid+':'+input.id)*4294967296);
  try{const transaction=await rewardTransaction(worldRef,raw=>{const started=performance.now();rejected=null;if(!raw)return;if(!campaignEnabled(raw))throw Error('새 기능은 다음 시즌부터 적용됩니다.');const at=Math.max(Date.now(),raw.updatedAt);try{output=campaignCommand(raw,uid,input,at,{draw});return output.world;}catch(error){rejected=error.message;return settlementAfterRejectedAction(raw,uid,input.id,at);}finally{timing.computeMs=(timing.computeMs||0)+performance.now()-started;timing.attempts=(timing.attempts||0)+1;}});timing.transactionMs=performance.now()-clock;if(!transaction.committed)throw Error('명령을 확인하지 못했습니다. 같은 요청으로 다시 확인해 주세요.');
-  const n=transaction.snapshot.val(),{historyFeed}=await import('./game.js');await db.ref('historyFeed/'+worldId).transaction(old=>old?.revision>n.revision?undefined:historyFeed(n));const events=Object.values(n.history||{}).filter(e=>e.id===input.id&&['update','season'].includes(e.type)||e.type==='bounty'&&e.text?.startsWith('📣'));if(events.length)await db.ref('chat/'+worldId).transaction(raw=>appendSystemMessages(raw,events,uid,n.updatedAt));if(n.season.endedAt)await db.ref('seasonIndex/'+worldId).set({id:worldId,title:n.season.result.title,endedAt:n.season.endedAt});if(draw%20===0)console.info('campaign-timing',{type:input.type,rejected:!!rejected,...timing,totalMs:performance.now()-clock});if(rejected)throw Error(rejected);return {result:output?.result||null,event:n.history?.[input.id]||null,commit:{worldId,id:input.id,revision:n.revision,commandSeq:n.players?.[uid]?.commandSeq||0},guardPending:Object.values(n.pendingBattles||{}).some(b=>b.actor===uid)};
+  const n=transaction.snapshot.val(),{historyFeed}=await import('./game.js');await db.ref('historyFeed/'+worldId).transaction(old=>old?.revision>n.revision?undefined:historyFeed(n));const events=Object.values(n.history||{}).filter(e=>e.id===input.id&&['update','season'].includes(e.type)||e.type==='bounty'&&e.text?.startsWith('📣'));if(events.length)await db.ref('chat/'+worldId).transaction(raw=>appendSystemMessages(raw,events,uid,n.updatedAt));if(n.season.endedAt)await db.ref('seasonIndex/'+worldId).set({id:worldId,title:n.season.result.title,endedAt:n.season.endedAt});if(draw%20===0)console.info('campaign-timing',{type:input.type,rejected:!!rejected,...timing,totalMs:performance.now()-clock});if(rejected)throw Error(rejected);return {result:output?.result||null,event:await committedBattleEvent(worldRef,n,input.id,transaction.fullHistory),commit:{worldId,id:input.id,revision:n.revision,commandSeq:n.players?.[uid]?.commandSeq||0},guardPending:Object.values(n.pendingBattles||{}).some(b=>b.actor===uid)};
  }catch(error){throw new HttpsError('failed-precondition',error.message||'명령을 처리하지 못했습니다.',{definiteRejection:!!rejected});}
 });

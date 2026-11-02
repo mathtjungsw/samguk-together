@@ -1,0 +1,11 @@
+import fs from 'node:fs';import {execFileSync} from 'node:child_process';import assert from 'node:assert/strict';
+import {refreshIndexes} from '../src/engine-next.js';import {livingUnits,ownedTerritories,requireGame} from '../src/game-core.js';import {campaignEnabled} from '../src/campaign-policy.js';import {packBattleRecords} from '../server/battle-records.js';
+const path=process.argv[2];if(!path)throw Error('비교할 로컬 저장 사본 경로가 필요합니다.');
+const original=JSON.parse(fs.readFileSync(path)),source=execFileSync('git',['show','0da0314:src/engine-next.js'],{encoding:'utf8'});
+const index=source.split('\n').find(s=>s.startsWith('function heroIndex(')),refresh=source.split('\n').find(s=>s.startsWith('export function refreshIndexes(')).replace('export ','');
+const prior=new Function('requireGame','campaignEnabled','livingUnits','ownedTerritories',index+'\n'+refresh+'\nreturn refreshIndexes;')(requireGame,campaignEnabled,livingUnits,ownedTerritories);
+const before=structuredClone(original),after=structuredClone(original);prior(before);refreshIndexes(after);assert.deepEqual(after,before);
+const measure=(fn,s)=>{for(let i=0;i<10;i++)fn(s);const a=[];for(let i=0;i<100;i++){const at=performance.now();fn(s);a.push(performance.now()-at);}a.sort((a,b)=>a-b);return {medianMs:a[50],p95Ms:a[95]};};
+const packed=packBattleRecords(original,original,{activate:true});delete packed.recordOutbox;const bytes=o=>Buffer.byteLength(JSON.stringify(o));
+const report={snapshot:path,beforeBytes:bytes(original),afterPublicationBytes:bytes(packed),reductionPercent:100*(1-bytes(packed)/bytes(original)),battleDetails:Object.values(original.history||{}).filter(e=>e.type==='battle'&&e.result).length,legacyIndex:measure(prior,before),singlePassIndex:measure(refreshIndexes,after),sameIndexOutput:true,scope:'local Node only; not production end-to-end latency'};
+console.log(JSON.stringify(report));

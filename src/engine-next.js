@@ -85,7 +85,14 @@ export function unitTier(roll,probabilities=[9000,700,250,50]){let n=roll*10000;
 export const emptyRoles=()=>({governor:'',defense:[],support:'',supportManual:'',supportChangeAt:0,retreat:'',guardTarget:'',policyVersion:1,policySeed:'',governorSince:0,defenseSince:0,governorChangeAt:0,defenseChangeAt:0});
 const countUnits=s=>Object.values(s.territories).reduce((n,t)=>n+t.units.length,0)+Object.values(s.returnQueues||{}).reduce((n,q)=>n+q.units.length,0);
 function heroIndex(s){const out={};const add=(u,owner,location)=>{if(!u.heroId)return;requireGame(!out[u.heroId],'같은 무장이 전장에 두 명 있습니다.','CORRUPT');out[u.heroId]={unitId:u.id,owner,...location};};for(const t of Object.values(s.territories))t.units.forEach((u,slot)=>add(u,t.owner,{kind:'territory',territoryId:t.id,slot}));for(const [uid,q] of Object.entries(s.returnQueues||{}))q.units.forEach((u,slot)=>add(u,uid,{kind:'queue',territoryId:'',slot}));if(campaignEnabled(s))for(const p of Object.values(s.campaign?.captives||{}))add(p.unit,p.owner,{kind:'captive',territoryId:'',slot:0});return out;}
-export function refreshIndexes(s){s.heroIndex=heroIndex(s);for(const p of Object.values(s.players)){p.rulerId=livingUnits(s,p.uid).find(u=>u.sides===20)?.id||'';p.landCount=ownedTerritories(s,p.uid).length;}return s;}
+export function refreshIndexes(s){
+ s.heroIndex=heroIndex(s);
+ const totals=new Map(Object.values(s.players).map(p=>[p.uid,{land:0,ruler:''}]));
+ for(const t of Object.values(s.territories)){const row=totals.get(t.owner);if(!row)continue;row.land++;if(!row.ruler)row.ruler=t.units.find(u=>u.sides===20)?.id||'';}
+ for(const [uid,q]of Object.entries(s.returnQueues||{})){const row=totals.get(uid);if(row&&!row.ruler)row.ruler=q.units.find(u=>u.sides===20)?.id||'';}
+ if(campaignEnabled(s))for(const p of Object.values(s.campaign?.captives||{})){const row=totals.get(p.owner);if(row&&!row.ruler&&p.unit.sides===20)row.ruler=p.unit.id;}
+ for(const p of Object.values(s.players)){const row=totals.get(p.uid);p.rulerId=row.ruler;p.landCount=row.land;}return s;
+}
 function autoRoles(t,at){const available=t.units.filter(u=>effectOf(u)&&u.readyAt<=at);if(!t.roles.governor){const u=available.filter(u=>effectOf(u).economic).sort((a,b)=>effectOf(b).sides-effectOf(a).sides||byId(a,b))[0];if(u){t.roles.governor=u.id;t.roles.governorSince=at;}}if(!t.roles.defense.length){t.roles.defense=available.filter(u=>effectOf(u).battle&&effectOf(u).defense).sort((a,b)=>effectOf(b).sides-effectOf(a).sides||byId(a,b)).slice(0,2).map(u=>u.id);if(t.roles.defense.length)t.roles.defenseSince=at;}}
 export function upgradeWorld(raw,at=raw.updatedAt){
   if(raw.featureVersion===6)return normalizeWorld(raw);
