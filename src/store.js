@@ -33,6 +33,9 @@ export class FirebaseStore {
   now(){return Date.now()+this.offset;}
   async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
   async claimReward(ticketId,city){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
+  enhancementKey(){return 'samguk-enhancement-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
+  pendingEnhancement(){try{const p=JSON.parse(globalThis.localStorage?.getItem(this.enhancementKey())||'null');return p&&p.worldId===this.config.worldId&&typeof p.id==='string'?p:null;}catch{return null;}}
+  enhanceArmy(spec){return this.serialize(async()=>{if(!canWrite(this))throw Error('최신 전황을 다시 연결한 뒤 시도해 주세요.');const req=this.pendingEnhancement()||{...spec,worldId:this.config.worldId};try{globalThis.localStorage?.setItem(this.enhancementKey(),JSON.stringify(req));}catch{}try{const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'enhanceArmy'),result=(await call(req)).data;await this.retryRead();try{globalThis.localStorage?.removeItem(this.enhancementKey());}catch{}return result;}catch(error){if(error.details?.committed===false||/invalid-argument|unauthenticated|permission-denied/.test(error.code||'')){try{globalThis.localStorage?.removeItem(this.enhancementKey());}catch{}}throw error;}});}
   serialize(task){const result=(this.writeQueue||Promise.resolve()).catch(()=>{}).then(task);this.writeQueue=result.catch(()=>{});return result;}
   async setup(){
     if(this.app)return;

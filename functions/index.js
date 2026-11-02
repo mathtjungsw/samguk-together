@@ -6,6 +6,7 @@ import {onValueWritten} from 'firebase-functions/v2/database';
 import {recordManifest,recordHash} from './record-versions.js';
 import {claimReward} from './rewards.js';
 import {rewardTransaction} from './reward-transaction.js';
+import {applyEnhancement} from './enhancement.js';
 import {createHmac} from 'node:crypto';
 import {loadAiContext,advanceLiveAi,aiStartCount,previousRulerNames,encodeLiveAi,castAiBallot,aiElectors,createSeasonWorld,followingSeason,systemEvents,appendSystemMessages} from './game.js';
 initializeApp();const db=getDatabase();
@@ -53,6 +54,13 @@ export const aiRulerChoice=onCall({...settings,invoker:'public'},async request=>
 });
 
 export const archiveRecordVersion=onValueWritten({...settings,ref:'/worlds/{worldId}/season/result',instance:'samguk-together-default-rtdb'},async event=>{const result=event.data.after.val();if(result)await db.ref('recordVersions/'+event.params.worldId+'/archive').set(recordHash(result));});
+
+export const enhanceArmy=onCall({...settings,invoker:'public'},async request=>{
+ if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');const uid=request.auth.uid,req=request.data||{},worldId=req.worldId;
+ if(!/^season-[1-9][0-9]*$/.test(worldId||'')||!/^[\w-]{8,100}$/.test(req.id||'')||typeof req.unitId!=='string'||req.unitId.length>256||typeof req.city!=='string'||req.city.length>100||!Array.isArray(req.materialIds)||req.materialIds.length>8||!req.materialIds.every(x=>typeof x==='string'&&x.length<=256)||(req.boosterId!==undefined&&(typeof req.boosterId!=='string'||req.boosterId.length>256))||!Number.isInteger(req.seq)||req.seq<0||req.seq>=1e9)throw new HttpsError('invalid-argument','강화 요청과 재료를 확인해 주세요.');
+ const key=process.env.AI_DICE_KEY;if(!key)throw new HttpsError('internal','서버 강화 설정을 확인해 주세요.');const draw=createHmac('sha256',key).update('enhance:'+worldId+':'+uid+':'+req.seq).digest().readUInt32BE(0),worldRef=db.ref('worlds/'+worldId);let receipt,committed=false;
+ try{const result=await rewardTransaction(worldRef,raw=>{if(!raw)return;const next=applyEnhancement(raw,uid,req,Math.max(Date.now(),raw.updatedAt),draw);receipt=next.result;return next.world;});if(!result.committed)throw Error('전황이 바뀌었습니다. 같은 요청으로 다시 확인해 주세요.');committed=true;const s=result.snapshot.val(),{historyFeed}=await import('./game.js');await db.ref('historyFeed/'+worldId).transaction(old=>old?.revision>s.revision?undefined:historyFeed(s));return receipt;}catch(error){console.warn('enhance-failed',error.message);throw new HttpsError('failed-precondition',error.message||'강화 결과를 확인하지 못했습니다.',{committed});}
+});
 
 export const rulerReward=onCall({...settings,invoker:'public'},async request=>{
  if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');

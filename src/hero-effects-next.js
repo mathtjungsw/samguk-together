@@ -1,4 +1,5 @@
 import {catalogEffect} from './hero-catalog.js';
+import {rollDie,enhancementEnabled} from './enhancement-policy.js';
 import {baseCapacity as v5Capacity} from './combat-policy.js';
 import {battleCondition} from './effect-preview.js';
 import {chooseOfficers} from './role-policy.js';
@@ -58,7 +59,7 @@ const emptyLedger=()=>({bonus:0,flat:0,cost:0,logs:[]});
 // A single pure evaluator drives real combat and independent probability samples.
 // Every die retains its original value; caps are visible score adjustments.
 export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],defenseIds,at,seed=0,rolls=null}){
-  const rng=seededRandom(seed),roll=(units,side)=>units.map((u,i)=>({...structuredClone(u),originalRoll:rolls?.[side]?.[i]??(1+Math.floor(rng()*u.sides)),roll:0})).map(u=>({...u,roll:u.originalRoll}));
+  const rng=seededRandom(seed),roll=(units,side)=>units.map((u,i)=>({...structuredClone(u),originalRoll:rolls?.[side]?.[i]??rollDie(u,rng,enhancementEnabled(s)),roll:0})).map(u=>({...u,roll:u.originalRoll}));
   const a={attack:true,dice:roll(attackUnits,'attack'),coefficient:.9,chosen:[],ledger:new Map(),penalty:0,flatPenalty:0,cancel:0,relief:0,rerolled:new Set(),used:[]};
   const d={attack:false,dice:roll(defendUnits,'defense'),coefficient:1,chosen:[],ledger:new Map(),penalty:0,flatPenalty:0,cancel:0,relief:0,rerolled:new Set(),used:[]};
   a.chosen=battleOfficers(s.territories[from],a.dice,attackIds,at,true,s);
@@ -77,7 +78,7 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     if(n===18)targets=side.dice.filter(x=>[4,6].includes(x.sides)&&x.roll<=x.sides/2).sort((x,y)=>x.originalRoll/x.sides-y.originalRoll/y.sides||byId(x,y)).slice(0,3);
     if(n===39)targets=[u];
     if(n===67)targets=sorted(infantry(side.dice).filter(x=>x.roll===1)).slice(0,2);
-    for(const target of targets)if(!side.rerolled.has(target.id)){side.rerolled.add(target.id);ownChange(side,u,()=>{target.roll=Math.max(target.roll,1+Math.floor(rng2()*target.sides));},'재굴림');}
+    for(const target of targets)if(!side.rerolled.has(target.id)){side.rerolled.add(target.id);ownChange(side,u,()=>{target.roll=Math.max(target.roll,rollDie(target,rng2,enhancementEnabled(s)));},'재굴림');}
   }
   for(const [side,enemy,u] of all){
     const n=effectNumber(u),num=side.dice.length,foes=enemyCount(side,enemy),st=stateOf(u),inf=infantry(side.dice),less=num<foes,attack=side.attack;
@@ -136,7 +137,7 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     if(generic[n])plus(generic[n]);
     if([102,149].includes(n))self(1);if(n===123&&num<=4)self(2);if(n===124)ownChange(side,u,()=>u.roll=Math.max(2,u.roll),'안정');
     if([113,134].includes(n))side.cancel++;
-    if(n===114){const target=inf.find(x=>x.originalRoll===1&&!side.rerolled.has(x.id));if(target){side.rerolled.add(target.id);ownChange(side,u,()=>target.roll=Math.max(target.roll,1+Math.floor(effectRng(u)()*target.sides)),'재굴림')}}
+    if(n===114){const target=inf.find(x=>x.originalRoll===1&&!side.rerolled.has(x.id));if(target){side.rerolled.add(target.id);ownChange(side,u,()=>target.roll=Math.max(target.roll,rollDie(target,effectRng(u),enhancementEnabled(s))),'재굴림')}}
     if(n===146&&inf.length>=3)addDie(sorted(inf)[0],1);
 
   }

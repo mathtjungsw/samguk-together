@@ -1,4 +1,5 @@
 import {riskPolicy} from './ai-risk.js';
+import {minFace} from './enhancement-policy.js';
 import {movementPlan,capacityOf,isLocked,estimateBattle,validateRevival} from './engine-next.js';
 import {adjacent,ownedTerritories,livingUnits,hash32,RULES} from './game-core.js';
 import {chooseOfficers,officerOrder} from './role-policy.js';
@@ -6,13 +7,13 @@ import {effectOf} from './hero-effects-next.js';
 import {isAi,AI_POLICY} from './ai-world.js';
 import {historyFeed} from './world-data.js';
 
-const mean=units=>units.reduce((n,u)=>n+(u.sides+1)/2,0);
+const mean=units=>units.reduce((n,u)=>n+(u.sides+minFace(u))/2,0);
 const ids=units=>units.map(u=>u.id);
 const bounded=(n,max=1)=>Math.max(0,Math.min(max,n));
 const front=(s,t)=>adjacent(t.id).some(id=>s.territories[id].owner!==t.owner);
 export function aiThreshold(s,uid,units,target,at=s.updatedAt){
-  const elapsed=Math.max(0,at-(s.players[uid].ai?.lastAttackAt??s.players[uid].ai?.bornAt??at)),relief=Math.min(.15,Math.floor(elapsed/3600000)*.05),base=target.owner&&!isAi(s.players[target.owner]) ? .80 : .75;
-  return Math.max(units.some(u=>u.sides===20)?.90:0,.65,base-relief);
+  const modern=s.season?.aiAttackVersion===2,elapsed=Math.max(0,at-(s.players[uid].ai?.lastAttackAt??s.players[uid].ai?.bornAt??at)),relief=Math.min(.15,Math.floor(elapsed/3600000)*.05),base=target.owner&&!isAi(s.players[target.owner]) ? (modern?.75:.80) : (modern?.70:.75);
+  return Math.max(units.some(u=>u.sides===20)?.90:0,modern?.60:.65,base-relief);
 }
 export function canAttackCountry(s,uid,target){return target.owner!==uid&&(!target.owner||isAi(s.players[target.owner])||ownedTerritories(s,target.owner).length>2);}
 
