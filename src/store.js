@@ -57,7 +57,23 @@ export class FirebaseStore {
   }
   campaignRecovered(request,state){this.clearCampaignPending(request);if(state==='superseded')throw new GameError('이전 명령 확인을 정리했습니다. 최신 전황에서 병력을 다시 선택해 주세요.','STALE_COMMAND');return {world:this.world,event:this.world.history?.[request.id]||null,result:{id:request.id,...(state==='confirmed'?{already:true}:{notReplayable:true})}};}
   async recoverCampaign(){return this.serialize(async()=>{const pending=this.pendingCampaign();if(!pending)return {world:this.world,result:{checked:true}};try{return await this.performCampaign(pending);}catch(error){if(error.code==='STALE_COMMAND')return {world:this.world,result:{notReplayable:true}};throw error;}});}
+  async autoRecoverCampaign({reset=false}={}){
+    if(this.closed||!this.connected||!this.worldReady||this.campaignExecuting||this.recoveryTask||this.campaignSyncPending())return;
+    const pending=this.pendingCampaign();if(!pending){this.recoveryState=null;return;}
+    const key=this.campaignKey()+':'+pending.id;
+    if(reset||this.recoveryState?.key!==key)this.recoveryState={key,attempts:0,next:0};
+    const state=this.recoveryState;
+    if(state.attempts>=3||Date.now()<state.next)return;
+    state.attempts++;state.next=Date.now()+(state.attempts===1?2000:5000);
+    this.recoveryTask=this.recoverCampaign();
+    try{return await this.recoveryTask;}catch{return null;}finally{state.next=Date.now()+(state.attempts===1?2000:5000);this.recoveryTask=null;if(!this.closed)this.onConnection(this.connected);}
+  }
   async performCampaign(spec){
+    this.campaignExecuting=true;
+    try{return await this.executeCampaign(spec);}finally{this.campaignExecuting=false;}
+  }
+  async executeCampaign(spec){
+    if(this.closed)throw new GameError('연결이 종료되었습니다. 다시 접속해 주세요.','OFFLINE');
     if(this.campaignSyncPending())throw new GameError('명령은 완료됐습니다. 최신 전황을 확인한 뒤 다시 시도해 주세요.','SYNC_PENDING');
     if(spec.worldId&&spec.worldId!==this.config.worldId)throw new GameError('이전 시즌의 명령은 다시 실행할 수 없습니다.','STALE_COMMAND');
     let state=campaignRequestState(this.world,this.uid,spec,this.config.worldId);
@@ -65,7 +81,8 @@ export class FirebaseStore {
     let pending=this.pendingCampaign();
     // Recovery first observes the latest committed state. Never change the ID
     // or sequence of an uncertain request to make an old attack run again.
-    if(pending){await this.retryRead();state=campaignRequestState(this.world,this.uid,pending,this.config.worldId);if(state!=='unknown'){if(pending.id===spec.id)return this.campaignRecovered(pending,state);this.clearCampaignPending(pending);pending=null;}else if(pending.id!==spec.id)throw Error('이전 명령의 결과를 먼저 확인해 주세요.');}
+    if(pending){await this.retryRead();state=campaignRequestState(this.world,this.uid,pending,this.config.worldId);if(state!=='unknown'){if(pending.id===spec.id)return this.campaignRecovered(pending,state);this.clearCampaignPending(pending);pending=null;}else if(pending.id!==spec.id)throw Error('처리 상태를 자동 확인 중입니다. 잠시 후 다시 시도해 주세요.');}
+    if(this.closed||spec.worldId&&spec.worldId!==this.config.worldId)throw new GameError('전장이 바뀌었습니다. 최신 화면에서 다시 확인해 주세요.','STALE_COMMAND');
     const request=pending||{...spec,seq:this.world.players[this.uid]?.commandSeq||0,worldId:this.config.worldId};this.saveCampaignPending(request);
     let data;
     try{data=await this.callCampaign('campaignOrder',request);}
@@ -157,7 +174,7 @@ export class FirebaseStore {
     this.connected=await new Promise(resolve=>this.sdk.onValue(this.sdk.ref(this.db,'.info/connected'),snap=>resolve(snap.val()===true),{onlyOnce:true}));
     // A Google identity authenticates access; the player chooses the public
     // ruler name separately before a profile is registered or migrated.
-    if(this.config.seasons&&this.world.featureVersion===6&&!this.world.players[this.uid]&&this.publicName&&!seasonClosed(this.world,this.now())){await this.retryRead();await this.submit({type:'register',name:this.publicName});}this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
+    if(this.config.seasons&&this.world.featureVersion===6&&!this.world.players[this.uid]&&this.publicName&&!this.pendingCampaign()&&!this.campaignSyncPending()&&!seasonClosed(this.world,this.now())){await this.retryRead();await this.submit({type:'register',name:this.publicName});}this.onWorld(this.world);return this.world.players[this.uid]||{uid:this.uid,name:'',nameChosen:false};
   }
   async retryRead({worldOnly=false}={}){
     if(this.reading){await this.reading;if(!worldOnly&&!this.chatReady)return this.retryRead();return;}

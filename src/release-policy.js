@@ -1,6 +1,6 @@
 export const D6_NEWS_SINCE=Date.parse('2026-10-28T14:00:00+09:00');
-export const RELEASE_ID='update-20261102-action-latency';
-export const RELEASE_TEXT='📣 공격·이동 결과 표시를 개선했습니다. 서버가 확정한 결과를 먼저 보여주고 전황은 이어서 반영합니다. 이미 받은 전황을 재사용하고 불필요한 채팅 재조회를 줄였습니다. 전황 반영 중에는 중복 명령을 방지합니다. 새로고침해 주세요.';
+export const RELEASE_ID='update-20261102-command-card-removed';
+export const RELEASE_TEXT='📣 영토·명령 화면의 이전 명령 확인 카드를 제거했습니다. 처리 상태는 자동 확인하며, 연결이 필요하면 상단 다시 연결 버튼을 이용할 수 있습니다. 비밀 임무는 제공하지 않습니다. 기존 병력·장수·보상은 유지됩니다. 새로고침해 주세요.';
 export const heroNewsAllowed=(u,at)=>[8,12].includes(u.sides)||u.sides===6&&at>=D6_NEWS_SINCE;
 // A newer release may replace the banner while this older tab is still open.
 // Its receipt means this client must not repeatedly announce its old release.
