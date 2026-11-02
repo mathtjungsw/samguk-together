@@ -7,6 +7,7 @@ import {recordManifest,recordHash} from './record-versions.js';
 import {claimReward} from './rewards.js';
 import {rewardTransaction} from './reward-transaction.js';
 import {applyEnhancement} from './enhancement.js';
+import {campaignCommand,settlementAfterRejectedAction,missionOptions,selectMission,missionProgress,canReplaceMission,configureCampaignRandom,campaignEnabled,FIRST_CAMPAIGN_SEASON} from './campaign.js';
 import {createHmac} from 'node:crypto';
 import {loadAiContext,advanceLiveAi,aiStartCount,previousRulerNames,encodeLiveAi,castAiBallot,aiElectors,createSeasonWorld,followingSeason,systemEvents,appendSystemMessages} from './game.js';
 initializeApp();const db=getDatabase();
@@ -22,7 +23,7 @@ async function tick(){
  if((await db.ref('aiOperations/enabled').get()).val()!==true)return {status:'disabled'};
  const {id,season,index}=await current();if(!season||season.endedAt)return {status:'waiting'};
  const firstRef=db.ref('aiOperations/firstSeason');await firstRef.transaction(old=>old??season.number);const firstSeason=(await firstRef.get()).val();
- const key=process.env.AI_DICE_KEY;if(!key||key.length<32)throw Error('AI_DICE_KEY is missing');
+ const key=process.env.AI_DICE_KEY;if(!key||key.length<32)throw Error('AI_DICE_KEY is missing');const rng=tag=>createHmac('sha256',key).update(tag).digest().readUInt32BE(0)/4294967296;configureCampaignRandom(rng);const game=await import('./game.js');game.configureCampaignRandom(rng);
  const ref=db.ref('worlds/'+id);let initial,callback;
  // Keep this bounded world snapshot in the SDK cache during the CAS; never read the DB root or one copy per AI.
  await new Promise((resolve,reject)=>{callback=s=>{if(initial===undefined){initial=s.val();resolve();}};ref.on('value',callback,reject);});
@@ -68,4 +69,25 @@ export const rulerReward=onCall({...settings,invoker:'public'},async request=>{
  const ticketRef=db.ref('rewardTickets/'+uid+'/'+ticketId),ticket=(await ticketRef.get()).val();if(!ticket||ticket.uid!==uid||!/^season-\d+$/.test(ticket.season))throw new HttpsError('permission-denied','지급된 보상이 없습니다.');
  const key=process.env.AI_DICE_KEY;if(!key)throw new HttpsError('internal','서버 보상 설정을 확인해 주세요.');const random=createHmac('sha256',key).update('reward:'+uid+':'+ticketId).digest().readUInt32BE(0),worldRef=db.ref('worlds/'+ticket.season);let output;
  try{const result=await rewardTransaction(worldRef,raw=>{if(!raw)return;output=claimReward(raw,uid,ticket,city,Math.max(Date.now(),raw.updatedAt),random);return output.world;});if(!result.committed)throw Error('전황이 바뀌었습니다. 다시 시도해 주세요.');const s=result.snapshot.val(),claim=JSON.parse(s.rewardClaims)[ticketId];await ticketRef.update({status:'claimed',claim});const {historyFeed}=await import('./game.js');await db.ref('historyFeed/'+ticket.season).transaction(old=>old?.revision>s.revision?undefined:historyFeed(s));return claim;}catch(error){console.warn('reward-claim-failed',error.message);throw new HttpsError('failed-precondition',error.message||'보상을 받지 못했습니다. 사용권은 보존됩니다.');}
+});
+
+export const campaignOpen=onCall({...settings,invoker:'public'},async request=>{
+ if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');
+ const id=request.data?.worldId;if(!/^season-[1-9][0-9]*$/.test(id||''))throw new HttpsError('invalid-argument','시즌 번호를 확인해 주세요.');const number=+id.slice(7);if(number<FIRST_CAMPAIGN_SEASON)throw new HttpsError('failed-precondition','이전 시즌은 기존 경로로 입장해 주세요.');
+ const existing=await header(id);if(existing)return {id,number:existing.number};const previous=await header('season-'+(number-1)),opening=followingSeason({season:previous},Date.now());if(!opening||opening.number!==number)throw new HttpsError('failed-precondition','새 시즌 개막 시각을 기다려 주세요.');
+ await db.ref('worlds/'+id).transaction(raw=>raw||createSeasonWorld(number,opening.startAt,'samguk-'+id));return {id,number};
+});
+
+export const campaignOrder=onCall({...settings,invoker:'public'},async request=>{
+ if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');const uid=request.auth.uid,{worldId,...input}=request.data||{};
+ if(!/^season-[1-9][0-9]*$/.test(worldId||'')||JSON.stringify(input).length>24000||!['getMission','chooseMission','replaceMission'].includes(input.type)&&!/^[\w-]{8,90}$/.test(input.id||''))throw new HttpsError('invalid-argument','명령을 확인해 주세요.');const key=process.env.AI_DICE_KEY;if(!key)throw new HttpsError('internal','서버 설정을 확인해 주세요.');const rng=tag=>createHmac('sha256',key).update(tag).digest().readUInt32BE(0)/4294967296;configureCampaignRandom(rng);
+ const worldRef=db.ref('worlds/'+worldId),privateRef=db.ref('privateMissions/'+worldId+'/'+uid);
+ if(['getMission','chooseMission','replaceMission'].includes(input.type)){
+  const raw=(await worldRef.get()).val();if(!campaignEnabled(raw)||!raw.players?.[uid]||raw.players[uid].kind==='ai'||!Object.values(raw.territories).some(t=>t.owner===uid)||raw.season.endedAt||Date.now()>=raw.season.deadline)throw new HttpsError('failed-precondition','진행 중인 내 영토에서 비밀 목표를 확인해 주세요.');const at=Math.max(Date.now(),raw.updatedAt);
+  const out=await rewardTransaction(privateRef,current=>{const m=current||missionOptions(raw,uid,'mission:'+Math.floor(rng('mission:'+worldId+':'+uid)*4294967296),at);if(input.type==='chooseMission')return m.selected?m:selectMission(raw,m,input.kind,at);if(input.type==='replaceMission'){if(!canReplaceMission(raw,m))throw Error('교체 가능한 비밀 목표가 아닙니다.');return missionOptions(raw,uid,'replace:'+Math.floor(rng('mission-replace:'+worldId+':'+uid)*4294967296),at,1);}return m;},{allowMissing:true});const mission=out.snapshot.val();return {mission,progress:missionProgress(raw,mission),canReplace:canReplaceMission(raw,mission)};
+ }
+ if(!Number.isInteger(input.seq)||input.seq<0)throw new HttpsError('invalid-argument','명령 순번을 확인해 주세요.');let output,rejected=null;const mission=input.type==='claimMission'?(await privateRef.get()).val():null,draw=Math.floor(rng('command:'+worldId+':'+uid+':'+input.id)*4294967296);
+ try{const transaction=await rewardTransaction(worldRef,raw=>{rejected=null;if(!raw)return;if(!campaignEnabled(raw))throw Error('새 기능은 다음 시즌부터 적용됩니다.');const at=Math.max(Date.now(),raw.updatedAt);try{output=campaignCommand(raw,uid,input,at,{mission,draw});return output.world;}catch(error){rejected=error.message;return settlementAfterRejectedAction(raw,uid,input.id,at);}});if(!transaction.committed)throw Error('명령을 확인하지 못했습니다. 같은 요청으로 다시 확인해 주세요.');
+  const n=transaction.snapshot.val(),{historyFeed}=await import('./game.js');await db.ref('historyFeed/'+worldId).transaction(old=>old?.revision>n.revision?undefined:historyFeed(n));const events=Object.values(n.history||{}).filter(e=>e.id===input.id&&['update','season'].includes(e.type)||e.type==='bounty'&&e.text?.startsWith('📣'));if(events.length)await db.ref('chat/'+worldId).transaction(raw=>appendSystemMessages(raw,events,uid,n.updatedAt));if(n.season.endedAt)await db.ref('seasonIndex/'+worldId).set({id:worldId,title:n.season.result.title,endedAt:n.season.endedAt});if(rejected)throw Error(rejected);return {result:output?.result||null,event:n.history?.[input.id]||null};
+ }catch(error){throw new HttpsError('failed-precondition',error.message||'명령을 처리하지 못했습니다.',{definiteRejection:!!rejected});}
 });

@@ -9,7 +9,7 @@ export const placeInfo=id=>places.get(id),adjacent=id=>links.get(id)||[];
 export const baseCapacity=id=>RANKS[placeInfo(id)?.rank||'normal'].capacity;
 export const ownedTerritories=(s,uid)=>Object.values(s.territories).filter(t=>t.owner===uid);
 export const queuedUnits=(s,uid)=>s.returnQueues?.[uid]?.units||[];
-export const livingUnits=(s,uid)=>[...ownedTerritories(s,uid).flatMap(t=>t.units),...queuedUnits(s,uid)];
+export const livingUnits=(s,uid)=>[...ownedTerritories(s,uid).flatMap(t=>t.units),...queuedUnits(s,uid),...(s.season?.campaignVersion===1?Object.values(s.campaign?.captives||{}).filter(p=>p.owner===uid).map(p=>p.unit):[])];
 export const isOfficer=u=>[6,8,12].includes(u.sides),isLeader=u=>u.sides>4;
 export function hash32(value){let h=2166136261;for(const c of String(value)){h^=c.codePointAt(0);h=Math.imul(h,16777619);}return h>>>0;}
 export function seededRandom(seed){let h=typeof seed==='number'?seed>>>0:hash32(seed);return()=>{h=(h+0x6D2B79F5)>>>0;let t=h;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}

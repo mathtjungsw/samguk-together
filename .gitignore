@@ -14,3 +14,4 @@ functions/record-versions.js
 functions/rewards.js
 functions/reward-transaction.js
 functions/enhancement.js
+functions/campaign.js

@@ -1,3 +1,6 @@
+import {battleBond} from './bonds.js';
+import {campaignEnabled} from './campaign-policy.js';
+import {ruleMet} from './hero-rules-200.js';
 import {catalogEffect} from './hero-catalog.js';
 import {rollDie,enhancementEnabled} from './enhancement-policy.js';
 import {baseCapacity as v5Capacity} from './combat-policy.js';
@@ -36,12 +39,15 @@ export function economy(s,t,at){
     if(kind===85)interval=Math.min(interval,9*MINUTE);
   }
   if(n===90||n===106)interval=9*MINUTE;if([105].includes(n))capacity++;if(n===140&&at-since>=30*MINUTE)capacity++;if(n===131)interval=9.5*MINUTE;if([110,135].includes(n))d6=50;if(n===104)d8=25;if(n===150)d8=50;
+  if(u?.heroVersion===3){if(n===47)capacity+=t.units.filter(x=>x.sides===4).length>=4?1:-1;if(n===105){capacity--;if(at-since>=20*MINUTE)capacity+=2;}const r=effectOf(u)?.rule;if(r&&at-since>=(r.prepare||0)*MINUTE){if(r.capacity)capacity+=r.capacity;if(r.interval)interval=Math.min(interval,r.interval*MINUTE);}}
   return {interval,capacity,probabilities:[9000-d6-d8,700+d6,250+d8,50]};
 }
 export function regularRecruitBonus(s,t,at){
   const u=governor(s,t,at);if(!u)return null;
   const n=effectNumber(u),st=stateOf(u);st.recruits++;
-  if(n===107&&st.recruits%8===0||n===129&&st.recruits%10===0||n===1&&st.recruits%3===0||n===49&&st.recruits%8===0||n===92&&st.recruits%10===0)return u;
+  if(u.heroVersion===3&&n===49&&st.recruits%5===0)return u;
+  const rule=effectOf(u)?.rule;if(rule&&at-preparedSince(t,u)>=(rule.prepare||0)*MINUTE){if(rule.every&&st.recruits%rule.every===0&&at-Math.max(preparedSince(t,u),t.lastAttackAt||0)>=(rule.peace||0)*MINUTE)return u;if(rule.peaceBonus&&at-Math.max(preparedSince(t,u),t.lastAttackAt||0,st.lastProcAt||0)>=rule.peaceBonus*MINUTE){markProc(u,at);return u;}}
+  if(n===107&&st.recruits%8===0||n===129&&st.recruits%10===0||n===1&&st.recruits%3===0||n===49&&u.heroVersion!==3&&st.recruits%8===0||n===92&&st.recruits%10===0)return u;
   if((n===86||n===148)&&at-Math.max(preparedSince(t,u),t.lastAttackAt||0,st.lastProcAt||0)>=(n===148?60:40)*MINUTE){markProc(u,at);return u;}
   return null;
 }
@@ -75,7 +81,7 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
   for(const [side,enemy,u] of all.slice().sort((x,y)=>(effectNumber(x[2])===18?-1:effectNumber(y[2])===18?1:effectNumber(x[2])-effectNumber(y[2])))){
     const n=effectNumber(u),rng2=effectRng(u);let targets=[];
     if(n===12)targets=side.dice.filter(x=>x.sides===20&&x.roll<=5).slice(0,1);
-    if(n===18)targets=side.dice.filter(x=>[4,6].includes(x.sides)&&x.roll<=x.sides/2).sort((x,y)=>x.originalRoll/x.sides-y.originalRoll/y.sides||byId(x,y)).slice(0,3);
+    if(n===18)targets=side.dice.filter(x=>[4,6].includes(x.sides)&&x.roll<=x.sides/2).sort((x,y)=>x.originalRoll/x.sides-y.originalRoll/y.sides||byId(x,y)).slice(0,u.heroVersion===3?2:3);
     if(n===39)targets=[u];
     if(n===67)targets=sorted(infantry(side.dice).filter(x=>x.roll===1)).slice(0,2);
     for(const target of targets)if(!side.rerolled.has(target.id)){side.rerolled.add(target.id);ownChange(side,u,()=>{target.roll=Math.max(target.roll,rollDie(target,rng2,enhancementEnabled(s)));},'재굴림');}
@@ -85,12 +91,12 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     const plus=(value,label='특기')=>flat(side,u,value,label);
     const self=value=>ownChange(side,u,()=>{u.roll=Math.min(u.sides,u.roll+value);},'본인 눈');
     const addDie=(target,value)=>{if(target)ownChange(side,u,()=>{target.roll=Math.min(target.sides,target.roll+value);},'아군 눈');};
-    if(n===4&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
+    if(n===4&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(u.heroVersion===3?4:5);
     if(n===5&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
     if(n===7&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
     if(n===8)ownChange(side,u,()=>{u.roll=Math.max(u.roll,Math.min(8,u.sides));},'최저 눈');
     if(n===9)self(4);
-    if(n===10&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(6);
+    if(n===10&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(u.heroVersion===3?5:6);
     if(n===17&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met){plus(6);side.used.push({id:u.id,type:'proc'});}
     if(n===20&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(6);
     if(n===21&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
@@ -121,7 +127,7 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     if(n===65)side.cancel+=2;
     if(n===68&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(3);
     if(n===69&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
-    if(n===70){side.cancel+=4;if(less)plus(2)};
+    if(n===70){side.cancel+=4;if(less&&u.heroVersion!==3)plus(2)};
     if(n===72&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(5);
     if(n===75&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(1);
     if(n===76&&battleCondition(s,from,to,side.dice,enemy.dice,u,at,attack).met)plus(2);
@@ -133,21 +139,23 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     if(n===96&&u.originalRoll===6)plus(2);
     if(n===99)addDie(sorted(inf)[0],1);
     if(n===19)side.cancel+=4;
-    const generic={101:inf.length>=4?3:0,103:hasRuler(side.dice)?2:0,108:at-preparedSince(s.territories[to],u,true)>=10*MINUTE?3:0,112:adjCount()>=2?2:0,115:!side.attack&&num<=foes?4:0,116:side.attack&&s.territories[to].owner&&adjCount()>=2?5:0,117:inf.length>=4?4:0,118:less?2:0,119:st.lastAttackWon&&at-st.lastAttackAt<=30*MINUTE?2:0,120:inf.length>=3?3:0,121:less?3:0,122:u.originalRoll===6?2:0,125:num<=4?2:0,126:!s.territories[to].owner?2:0,127:enemy.dice.some(x=>[12,20].includes(x.sides))?4:0,128:at-preparedSince(s.territories[to],u,true)>=20*MINUTE?5:0,143:hasRuler(side.dice)?3:0,144:inf.length>=3?2:0};
+    const generic={101:inf.length>=4?3:0,103:hasRuler(side.dice)?2:0,108:at-preparedSince(s.territories[to],u,true)>=10*MINUTE?3:0,112:adjCount()>=2?2:0,115:!side.attack&&num<=foes?(u.heroVersion===3?3:4):0,116:side.attack&&s.territories[to].owner&&adjCount()>=2?(u.heroVersion===3?3:5):0,117:inf.length>=4?(u.heroVersion===3?3:4):0,118:less?(u.heroVersion===3?3:2):0,119:st.lastAttackWon&&at-st.lastAttackAt<=30*MINUTE?2:0,120:inf.length>=3?3:0,121:less?3:0,122:u.originalRoll===6?2:0,125:num<=4?2:0,126:!s.territories[to].owner?2:0,127:enemy.dice.some(x=>[12,20].includes(x.sides))?4:0,128:at-preparedSince(s.territories[to],u,true)>=20*MINUTE?5:0,143:hasRuler(side.dice)?3:0,144:inf.length>=3?2:0};
     if(generic[n])plus(generic[n]);
     if([102,149].includes(n))self(1);if(n===123&&num<=4)self(2);if(n===124)ownChange(side,u,()=>u.roll=Math.max(2,u.roll),'안정');
     if([113,134].includes(n))side.cancel++;
     if(n===114){const target=inf.find(x=>x.originalRoll===1&&!side.rerolled.has(x.id));if(target){side.rerolled.add(target.id);ownChange(side,u,()=>target.roll=Math.max(target.roll,rollDie(target,effectRng(u),enhancementEnabled(s))),'재굴림')}}
     if(n===146&&inf.length>=3)addDie(sorted(inf)[0],1);
+    const rule=effectOf(u)?.rule;if(rule&&ruleMet(s,from,to,side.dice,enemy.dice,u,at,attack,rule)){if(rule.flat)plus(rule.flat);if(rule.self)self(rule.self);if(rule.floor)ownChange(side,u,()=>u.roll=Math.max(u.roll,rule.floor),'최저 눈');if(rule.ally)for(const x of sorted(inf).slice(0,rule.ally))addDie(x,1);side.cancel+=rule.cancel||0;side.relief+=rule.relief||0;}
 
   }
-  for(const [side,enemy,u] of all){const n=effectNumber(u);if((n===16||n===73)&&side.attack){const coefficient=n===16?1:.98;if(coefficient>side.coefficient){const gain=rawScore(sumRoll(side.dice),true,coefficient)-rawScore(sumRoll(side.dice),true,side.coefficient);side.coefficient=coefficient;const l=ledger(side,u);l.bonus+=Math.min(n===16?8:6,gain);if(gain)l.logs.push(`${u.name} · 공격 감산 완화 +${Math.min(n===16?8:6,gain)}`);}}}
+  for(const [side,enemy,u] of all){const n=effectNumber(u);if((n===16||n===73)&&side.attack){const coefficient=n===16?1:.98;if(coefficient>side.coefficient){const gain=rawScore(sumRoll(side.dice),true,coefficient)-rawScore(sumRoll(side.dice),true,side.coefficient);side.coefficient=coefficient;const l=ledger(side,u);l.bonus+=Math.min(n===16&&u.heroVersion!==3?8:6,gain);if(gain)l.logs.push(`${u.name} · 공격 감산 완화 +${Math.min(n===16&&u.heroVersion!==3?8:6,gain)}`);}}}
   for(const [side,enemy,u] of all){
     const n=effectNumber(u);let targets=[],delta=0,setOne=false;
     if(n===14){targets=enemy.dice.slice().sort((x,y)=>y.sides-x.sides||y.originalRoll-x.originalRoll||byId(x,y)).slice(0,1);delta=2;}
     if(n===15||n===37||n===130){targets=sorted(infantry(enemy.dice),true).slice(0,2);delta=n===37?2:1;}
     if(n===43){targets=sorted(infantry(enemy.dice),true).slice(0,1);setOne=true;}
     if(n===97||n===145||n===109&&infantry(enemy.dice).length>=3){targets=sorted(infantry(enemy.dice),true).slice(0,1);delta=1;}
+    const rule=effectOf(u)?.rule;if(rule?.reduce&&ruleMet(s,from,to,side.dice,enemy.dice,u,at,side.attack,rule)){targets=sorted(infantry(enemy.dice),true).slice(0,1);delta=rule.reduce;}
     for(const target of targets){const before=rawScore(sumRoll(enemy.dice),enemy.attack,enemy.coefficient);target.roll=setOne?1:Math.max(1,target.roll-delta);const diff=before-rawScore(sumRoll(enemy.dice),enemy.attack,enemy.coefficient);enemy.penalty+=diff;if(diff)ledger(side,u).logs.push(`${u.name} · 적 눈 감소 -${diff}`);}
     if(n===98&&adjCount()>=2){enemy.flatPenalty++;ledger(side,u).logs.push(`${u.name} · 포위 감점 -1`);}
   }
@@ -157,7 +165,7 @@ export function evaluateBattle({s,from,to,attackUnits,defendUnits,attackIds=[],d
     const baseRaw=side.dice.reduce((n,u)=>n+u.originalRoll,0),base=rawScore(baseRaw,side.attack),bonus=Math.min(10,entries.reduce((n,l)=>n+Math.min(l.number===12?4:8,Math.max(0,l.bonus+l.flat)),0)),cost=entries.reduce((n,l)=>n+l.cost,0),penalty=Math.min(6,side.penalty+Math.max(0,side.flatPenalty-side.relief));
     return {dice:side.dice,baseRaw,baseScore:base,bonus,cost,penalty,score:Math.max(1,base+bonus+cost-penalty),logs:entries.flatMap(l=>l.logs),used:side.used,chosen:side.chosen.map(u=>u.id)};
   };
-  return {attack:finish(a,d),defense:finish(d,a)};
+  const result={attack:finish(a,d),defense:finish(d,a)};for(const [key,units,attack]of [['attack',attackUnits,true],['defense',defendUnits,false]]){const bond=battleBond(s,units,attack,at);if(bond){result[key].bond=bond;result[key].score+=bond[key]||0;result[key].logs.push('인연 · '+bond.title+' · '+bond.description);}}return result;
 }
 
 export function moveTiming(s,a,b,units,at,officerId,returning=[]){
@@ -171,8 +179,9 @@ export function moveTiming(s,a,b,units,at,officerId,returning=[]){
   if(n===100){set(actor,9);inf.slice(0,1).forEach(u=>set(u,9));}
   if(n===136){set(actor,8);inf.slice(0,2).forEach(u=>set(u,9))}if(n===137)set(actor,8);if(n===133&&inf[0])set(inf[0],9);if(n===138&&inf.length>=3)set(inf[0],8);if(n===141&&inf.length>=3)sourceDelay=9*MINUTE;
   const reverse=returning.slice().sort(byId)[0];if(n===80&&reverse&&reusable(actor,at,60)){returnDelays[reverse.id]=8*MINUTE;markProc(actor,at);}
+  const rule=effectOf(actor)?.rule;if(rule){if(rule.selfDelay)set(actor,rule.selfDelay);if(rule.infDelays)inf.slice(0,rule.infDelays).forEach(u=>set(u,9));if(rule.reverse&&reverse)returnDelays[reverse.id]=rule.reverse*MINUTE;}
   const receiver=governor(s,b,at);
-  if([90,132].includes(effectNumber(receiver))&&inf.length>=3&&reusable(receiver,at,10)){delays[inf[0].id]=Math.min(delays[inf[0].id],(effectNumber(receiver)===132?9:8)*MINUTE);markProc(receiver,at);}
+  if([90,132].includes(effectNumber(receiver))&&inf.length>=3&&reusable(receiver,at,10)){delays[inf[0].id]=Math.min(delays[inf[0].id],(effectNumber(receiver)===132||receiver.heroVersion===3?9:8)*MINUTE);markProc(receiver,at);}
   return {delays,returnDelays,sourceDelay};
 }
 
