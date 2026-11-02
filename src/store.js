@@ -78,6 +78,9 @@ export class FirebaseStore {
     // Callable success confirms the write independently of a later read error.
     this.clearCampaignPending(request);
     this.beginCampaignSync(request,data.commit,!!data.guardPending);
+    // Registration/name/start flows consume the resulting world immediately.
+    // Only combat/movement and guard completion detach their screen refresh.
+    if(!['move','resolveGuard'].includes(request.type)&&this.campaignSyncPending())try{await this.retryRead({worldOnly:true});}catch{}
     return {...data,world:this.world,...(this.campaignSyncPending()?{syncPending:true}:{})};
   }
   campaignAction(spec){return this.serialize(()=>this.performCampaign({...spec,id:spec.id||commandId()}));}
