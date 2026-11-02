@@ -1,4 +1,4 @@
-import {campaignEnabled,FIRST_CAMPAIGN_SEASON} from './campaign-policy.js';
+import {campaignEnabled,FIRST_CAMPAIGN_SEASON,isRetiredMissionCommand} from './campaign-policy.js';
 import {recordCache} from './record-cache.js';
 import {WorldReader,historyFeed} from './world-data.js';
 const indexEntry=result=>({id:result.id,title:result.title,endedAt:result.endedAt});
@@ -33,10 +33,9 @@ export class FirebaseStore {
   constructor(config){this.config=config;this.uid=null;this.world=null;this.chat=null;this.mode='online';this.connected=false;this.worldReady=false;this.chatReady=false;this.offset=0;this.onWorld=()=>{};this.onChat=()=>{};this.onConnection=()=>{};this.stops=[];this.pendingId=null;}
   now(){return Date.now()+this.offset;}
   campaignKey(){return 'samguk-campaign-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
-  pendingCampaign(){try{return JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null')||this.campaignPending||null;}catch{return this.campaignPending||null;}}
+  pendingCampaign(){let pending=this.campaignPending||null;try{pending=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null')||pending;}catch{}if(isRetiredMissionCommand(pending?.type)){this.saveCampaignPending(null);return null;}return pending;}
   saveCampaignPending(req){this.campaignPending=req;try{if(req)globalThis.localStorage?.setItem(this.campaignKey(),JSON.stringify(req));else globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
   async callCampaign(name,data){const f=await import('firebase/functions');return (await f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),name)(data)).data;}
-  async mission(type='getMission',kind){const data=await this.callCampaign('campaignOrder',{worldId:this.config.worldId,type,kind});this.missionState=data;return data;}
   async performCampaign(spec){const pending=this.pendingCampaign();if(pending&&pending.id!==spec.id)throw Error('이전 명령의 결과를 먼저 확인해 주세요.');const request=pending||{...spec,seq:this.world.players[this.uid]?.commandSeq||0,worldId:this.config.worldId};this.saveCampaignPending(request);try{const data=await this.callCampaign('campaignOrder',request);await this.retryRead();this.saveCampaignPending(null);return {...data,world:this.world};}catch(error){await this.retryRead().catch(()=>{});if(this.world?.receipts?.[request.id]){this.saveCampaignPending(null);return {world:this.world,event:this.world.history?.[request.id]||null,result:{id:request.id,already:true}};}if(error.details?.definiteRejection||/invalid-argument|unauthenticated|permission-denied/.test(error.code||''))this.saveCampaignPending(null);throw error;}}
   campaignAction(spec){return this.serialize(()=>this.performCampaign({...spec,id:spec.id||commandId()}));}
   async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}

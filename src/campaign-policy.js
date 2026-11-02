@@ -4,3 +4,6 @@ export const CAPTIVE={first:1800000,step:600000,deadline:7200000,chance:.1,captu
 export const nextPersuadeAt=p=>Math.max(p.at+CAPTIVE.first,(p.lastPersuadeAt||0)+(p.lastPersuadeAt?CAPTIVE.step:0));
 export const persuadeCost=p=>CAPTIVE.persuade[p.unit.sides]+(p.unit.enhanceLevel||0);
 export const nextEscapeAt=p=>Math.min(p.at+CAPTIVE.deadline,p.at+CAPTIVE.first+(p.escapeRound||0)*CAPTIVE.step);
+
+export const MISSIONS_REMOVED_MESSAGE='비밀 임무 기능이 삭제되었습니다. 화면을 새로고침해 주세요.';
+export const isRetiredMissionCommand=type=>['getMission','chooseMission','replaceMission','claimMission'].includes(type);

@@ -38,7 +38,7 @@ export function captureDefeated(s,owner,captor,dead,sacrificed,at,command){
 export function awardSlots(s,uid,id,slots,kind,at){const c=campaignState(s);if(!c.rewards[id])c.rewards[id]={id,uid,slots,kind,at,claimed:[]};return c.rewards[id];}
 export function activeBountyId(s,at){const b=s.campaign?.bounty;return b&&at<b.until?b.id:'';}
 export function battleCampaign(s,{attacker,defender,to,won,bountyId,at}){
- if(!campaignEnabled(s))return;const c=campaignState(s);if(won){const st=campaignStat(s,attacker);st.wins[to]=at;if(!defender)st.neutral[to]=at;else campaignStat(s,defender).lost[to]=at;
+ if(!campaignEnabled(s))return;const c=campaignState(s);if(won){const st=campaignStat(s,attacker);
  const b=c.bounty;if(defender&&b&&b.id===bountyId&&b.target===defender&&at<b.until&&s.players[attacker].kind!=='ai'){
   const key=attacker+'|'+defender+'|'+to;b.players??={};b.cities??={};b.paid??=0;
   if(!c.paidCities[key]&&!b.cities[to]&&(b.players[attacker]||0)<2&&b.paid<6&&st.bountyPaid<4){c.paidCities[key]=true;b.cities[to]=true;b.players[attacker]=(b.players[attacker]||0)+1;b.paid++;st.bountyPaid++;awardSlots(s,attacker,b.id+'-'+to,1,'bounty',at);campaignEvent(s,b.id+'-'+to,at,'bounty',`${s.players[attacker].name} · 토벌 점령 보상 D6 랜덤 무장 1명 수령 가능`,{actor:attacker,to});}
