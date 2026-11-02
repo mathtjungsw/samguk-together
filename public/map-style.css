@@ -16,6 +16,12 @@
 .map-city .city-flag{fill:#bb8e52;stroke:#f7f2df;stroke-width:.8}
 .map-place-label{font-family:"Malgun Gothic",sans-serif;font-size:11px;fill:#304833;paint-order:stroke;stroke:#f5f2e5;stroke-width:3.2;stroke-linejoin:round}
 .map-place-label.priority{font-weight:700;fill:#285b40}
+.map-faction-layer,.map-faction-layer *{pointer-events:none}
+.map-faction-name{font-family:"Malgun Gothic",sans-serif;font-weight:800;fill:#1e2d26;paint-order:stroke fill;stroke:#fffbed;stroke-width:3.8px;stroke-linejoin:round;letter-spacing:-.25px}
+.map-faction-dot{stroke:#304833;stroke-width:1px;paint-order:stroke fill;filter:drop-shadow(0 0 2px #fffbed)}
+.map-faction-leader{stroke-width:1.2px;opacity:.55;paint-order:stroke;filter:drop-shadow(0 0 1px #fffbed)}
+.map-faction.is-dimmed{opacity:.6}
+.map-place-label{font-variant-numeric:tabular-nums}
 .map-caption{background:#f4f2e7;border-top:1px solid #c7ceb7;color:#65775e}
 .name-change-button{margin-top:9px;color:#cfbc85!important;text-decoration:underline;text-underline-offset:3px}
 .ruler-name-modal{max-width:430px;margin:auto;text-align:center;padding:32px}
