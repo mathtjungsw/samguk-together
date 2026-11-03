@@ -1,3 +1,7 @@
+## 2026-11-03 강화 통신 절감
+
+서버 확정 결과를 먼저 표시하고 최신 전황은 실시간 구독으로 확인한다. 이미 받은 전황과 채팅을 강화 후 다시 조회하지 않는다. 최근100개 강화 재시도 기록은 작은 참조로 유지하고 상세는 별도로 안전하게 보존한다. 확률·재료·대기 규칙과 서버 전체 전장 검증은 유지한다. [실행 계획](docs/DEVELOPMENT_PLAN_2026-11-03_ENHANCEMENT_COMPACT.md), [작업·측정 기록](docs/UPDATE_2026-11-03_ENHANCEMENT_COMPACT.md). 서버·사이트 배포 후 `node tools/activate-enhancement-records.mjs`로 백업/ETag 보존 검사와 활성화를 수행한다. 로컬 통신 비교는 격리 DB 에뮬레이터에서 `node tools/benchmark-enhancement-traffic.mjs`로 실행한다.
+
 ## 2026-11-02 강화 대상 대기 제한 해제
 
 강화 대상과 재료 모두 행동·이동 대기 중 사용할 수 있다. 강화 후 기존 공격/이동 대기는 그대로 유지하며 전투 잠금과 기존 확률/재료비는 유지한다. 앞선 재료 변경에서 남겨 두었던 대상 대기 제한도 해제했다. [작업 기록](docs/UPDATE_2026-11-02_ENHANCEMENT_TARGET.md).

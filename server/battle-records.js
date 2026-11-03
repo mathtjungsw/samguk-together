@@ -1,5 +1,6 @@
 import {historySummary} from '../src/world-data.js';
 import {recordHash} from './record-versions.js';
+import {packEnhancementRecords,enhancementPublicationPatch} from './enhancement-records.js';
 
 // A committed outbox is the source of truth until publication. Versioned paths
 // make older concurrent publishers harmless: they can never overwrite a correction.
@@ -15,9 +16,9 @@ export function packBattleRecords(world,previous={}, {activate=false}={}){
  }
  for(const [id,event]of Object.entries(previous.history||{})){
   const version=event.detailVersion;
-  if(version&&history[id]?.detailVersion!==version)outbox['delete-'+version]={id,version,remove:true};
+  if(version&&event.type!=='enhance'&&history[id]?.detailVersion!==version)outbox['delete-'+version]={id,version,remove:true};
  }
- return {...world,history,recordOutbox:outbox,recordStorageVersion:1};
+ return packEnhancementRecords({...world,history,recordOutbox:outbox,recordStorageVersion:1},previous);
 }
 export function recordPublicationPatch(worldId,outbox){
  const patch={};
@@ -30,7 +31,7 @@ export function recordPublicationPatch(worldId,outbox){
  return patch;
 }
 export async function publishBattleRecords(ref,world){
- const patch=recordPublicationPatch(ref.key,world.recordOutbox);
+ const patch={...recordPublicationPatch(ref.key,world.recordOutbox),...enhancementPublicationPatch(ref.key,world.enhancementOutbox)};
  if(Object.keys(patch).length)await ref.root.update(patch);
 }
 export async function committedBattleEvent(ref,world,id,fullHistory={}){

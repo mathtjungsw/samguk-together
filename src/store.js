@@ -43,12 +43,13 @@ export class FirebaseStore {
     let p=this.confirmedSync;try{p=JSON.parse(globalThis.localStorage?.getItem(this.syncKey())||'null')||p;}catch{}
     if(!p)return false;
     const same=p.worldId===this.config.worldId&&this.world?.season?.id===p.worldId;
-    const proven=same&&campaignRequestState(this.world,this.uid,p,p.worldId)!=='unknown'&&(!Number.isInteger(p.revision)||this.world.revision>=p.revision);
+    const known=p.kind==='enhance'?(this.world?.players?.[this.uid]?.enhanceSeq||0)>p.seq:campaignRequestState(this.world,this.uid,p,p.worldId)!=='unknown';
+    const proven=same&&known&&(!Number.isInteger(p.revision)||this.world.revision>=p.revision);
     if(proven||p.worldId!==this.config.worldId){this.confirmedSync=null;clearTimeout(this.syncTimer);try{globalThis.localStorage?.removeItem(this.syncKey());}catch{}return false;}
     this.confirmedSync=p;return true;
   }
   beginCampaignSync(request,commit,urgent=false){
-    this.confirmedSync={id:request.id,seq:request.seq,worldId:request.worldId,...(commit?.worldId===request.worldId&&commit.id===request.id?{revision:commit.revision}:{})};
+    this.confirmedSync={id:request.id,seq:request.seq,worldId:request.worldId,...(request.kind==='enhance'?{kind:'enhance'}:{}),...(commit?.worldId===request.worldId&&commit.id===request.id?{revision:commit.revision}:{})};
     try{globalThis.localStorage?.setItem(this.syncKey(),JSON.stringify(this.confirmedSync));}catch{}
     clearTimeout(this.syncTimer);if(!this.campaignSyncPending())return;
     const scope=this.config.worldId;
@@ -105,7 +106,20 @@ export class FirebaseStore {
   async claimReward(ticketId,city){if(!canWrite(this))throw Error('최신 전황을 확인한 뒤 시도해 주세요.');const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
   enhancementKey(){return 'samguk-enhancement-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
   pendingEnhancement(){try{const p=JSON.parse(globalThis.localStorage?.getItem(this.enhancementKey())||'null');return p&&p.worldId===this.config.worldId&&typeof p.id==='string'?p:null;}catch{return null;}}
-  enhanceArmy(spec){return this.serialize(async()=>{if(!canWrite(this))throw Error('최신 전황을 다시 연결한 뒤 시도해 주세요.');const req=this.pendingEnhancement()||{...spec,worldId:this.config.worldId};try{globalThis.localStorage?.setItem(this.enhancementKey(),JSON.stringify(req));}catch{}try{const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'enhanceArmy'),result=(await call(req)).data;await this.retryRead();try{globalThis.localStorage?.removeItem(this.enhancementKey());}catch{}return result;}catch(error){if(error.details?.committed===false||/invalid-argument|unauthenticated|permission-denied/.test(error.code||'')){try{globalThis.localStorage?.removeItem(this.enhancementKey());}catch{}}throw error;}});}
+  enhanceArmy(spec){return this.serialize(async()=>{
+    if(!canWrite(this)||this.closed)throw Error('최신 전황을 다시 연결한 뒤 시도해 주세요.');
+    const req=this.pendingEnhancement()||{...spec,worldId:this.config.worldId},key=this.enhancementKey(),uid=this.uid;
+    const clear=()=>{try{if(JSON.parse(globalThis.localStorage?.getItem(key)||'null')?.id===req.id)globalThis.localStorage?.removeItem(key);}catch{}};
+    try{globalThis.localStorage?.setItem(key,JSON.stringify(req));}catch{}
+    let result;
+    try{result=await this.callCampaign('enhanceArmy',req);}
+    catch(error){if(error.details?.committed===false||/invalid-argument|unauthenticated|permission-denied/.test(error.code||''))clear();throw error;}
+    // Success is final even if a subsequent refresh fails. Reuse the realtime
+    // world and never re-send a confirmed roll to repair a failed read.
+    clear();
+    if(!this.closed&&this.uid===uid&&req.worldId===this.config.worldId)this.beginCampaignSync({...req,kind:'enhance'});
+    return result;
+  });}
   serialize(task){const result=(this.writeQueue||Promise.resolve()).catch(()=>{}).then(task);this.writeQueue=result.catch(()=>{});return result;}
   async setup(){
     if(this.app)return;
