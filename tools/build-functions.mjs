@@ -4,5 +4,5 @@ await build({stdin:{contents:"export {configureCampaignRandom} from './src/campa
 await build({entryPoints:['server/record-versions.js'],outfile:'functions/record-versions.js',bundle:true,platform:'node',format:'esm',target:'node22'});
 await build({entryPoints:['server/rewards.js'],outfile:'functions/rewards.js',bundle:true,platform:'node',format:'esm',target:'node22'});
 await build({entryPoints:['server/reward-transaction.js'],outfile:'functions/reward-transaction.js',bundle:true,platform:'node',format:'esm',target:'node22'});
-await build({entryPoints:['src/enhancement-actions.js'],outfile:'functions/enhancement.js',bundle:true,platform:'node',format:'esm',target:'node22'});
+await build({stdin:{contents:"export * from './src/enhancement-actions.js';export * from './src/enhancement-batch.js';",resolveDir:process.cwd()},outfile:'functions/enhancement.js',bundle:true,platform:'node',format:'esm',target:'node22'});
 await build({stdin:{contents:"export * from './server/campaign-command.js';export * from './src/campaign-actions.js';export {configureCampaignRandom} from './src/campaign-core.js';export {campaignEnabled,FIRST_CAMPAIGN_SEASON,isRetiredMissionCommand,MISSIONS_REMOVED_MESSAGE} from './src/campaign-policy.js';",resolveDir:process.cwd()},outfile:'functions/campaign.js',bundle:true,platform:'node',format:'esm',target:'node22'});

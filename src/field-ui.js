@@ -37,4 +37,4 @@ export class FieldMemory{
   readNews(s,events=visibleHistory(s)){let other={};try{other=JSON.parse(this.storage.getItem(this.key)||'{}')||{};}catch{}const ids=new Set([...(other.news?.ids||[]),...(this.value.news?.ids||[]),...events.map(e=>e.id)]);this.set('news',{at:s.updatedAt,ids:Object.keys(s.history||{}).filter(id=>ids.has(id))});}
 }
 export const filterChat=(messages,kind)=>messages.filter(m=>kind==='all'||(kind==='system'?m.kind==='system':m.kind!=='system'));
-export function canWrite(store){return !store?.world?.season?.endedAt&&!!store?.connected&&!store.campaignSyncPending?.()&&!store.pendingCampaign?.()&&(store.mode==='practice'||store.worldReady===true&&store.chatReady===true);}
+export function canWrite(store,{allowLocalEnhancement=false}={}){return !store?.world?.season?.endedAt&&!!store?.connected&&!store.campaignSyncPending?.()&&!store.pendingCampaign?.()&&(allowLocalEnhancement||!store.localEnhancementPending?.())&&(store.mode==='practice'||store.worldReady===true&&store.chatReady===true);}

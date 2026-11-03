@@ -6,7 +6,7 @@ import {onValueWritten} from 'firebase-functions/v2/database';
 import {recordManifest,recordHash} from './record-versions.js';
 import {claimReward} from './rewards.js';
 import {rewardTransaction,packBattleRecords,publishBattleRecords,committedBattleEvent,committedEnhancementResult} from './reward-transaction.js';
-import {applyEnhancement} from './enhancement.js';
+import {applyEnhancement,applyLocalEnhancementBatch} from './enhancement.js';
 import {campaignCommand,settlementAfterRejectedAction,isRetiredMissionCommand,MISSIONS_REMOVED_MESSAGE,configureCampaignRandom,campaignEnabled,FIRST_CAMPAIGN_SEASON} from './campaign.js';
 import {createHmac} from 'node:crypto';
 import {loadAiContext,advanceLiveAi,aiStartCount,previousRulerNames,encodeLiveAi,castAiBallot,aiElectors,createSeasonWorld,followingSeason,systemEvents,appendSystemMessages} from './game.js';
@@ -63,6 +63,11 @@ async function compactEnhancementsEnabled(){
 }
 export const enhanceArmy=onCall({...settings,invoker:'public'},async request=>{
  if(!request.auth||request.auth.token.firebase?.sign_in_provider!=='google.com')throw new HttpsError('unauthenticated','Google 로그인이 필요합니다.');const uid=request.auth.uid,req=request.data||{},worldId=req.worldId;
+ if(req.mode==='local-batch'){
+  if(!/^season-[1-9][0-9]*$/.test(worldId||'')||JSON.stringify(req).length>64000||!Array.isArray(req.items)||!req.items.length||req.items.length>32||req.items.some(r=>!r||!Number.isInteger(r.seq)||r.seq<0||typeof r.city!=='string'||typeof r.unitId!=='string'||!Array.isArray(r.materialIds)||r.materialIds.length>8||r.materialIds.some(id=>typeof id!=='string'||id.length>256)))throw new HttpsError('invalid-argument','일괄 강화 요청을 확인해 주세요.',{committed:false});
+  let committed=false,results;
+  try{const ref=db.ref('worlds/'+worldId),compactEnhancements=await compactEnhancementsEnabled();const tx=await rewardTransaction(ref,raw=>{if(!raw)return;const out=applyLocalEnhancementBatch(raw,uid,req.items,Math.max(Date.now(),raw.updatedAt));results=out.results;return out.world;},{compactEnhancements});if(!tx.committed)throw Error('강화 저장을 확인하지 못했습니다.');committed=true;const s=tx.snapshot.val(),{historyFeed}=await import('./game.js');await db.ref('historyFeed/'+worldId).transaction(old=>old?.revision>s.revision?undefined:historyFeed(s));return {results:await Promise.all(req.items.map((r,i)=>committedEnhancementResult(ref,s,r.id,results[i]))),nextSeq:s.players[uid].enhanceSeq};}catch(e){throw new HttpsError('failed-precondition',e.message||'강화 저장을 확인하지 못했습니다.',{committed});}
+ }
  if(!/^season-[1-9][0-9]*$/.test(worldId||'')||!/^[\w-]{8,100}$/.test(req.id||'')||typeof req.unitId!=='string'||req.unitId.length>256||typeof req.city!=='string'||req.city.length>100||!Array.isArray(req.materialIds)||req.materialIds.length>8||!req.materialIds.every(x=>typeof x==='string'&&x.length<=256)||(req.boosterId!==undefined&&(typeof req.boosterId!=='string'||req.boosterId.length>256))||!Number.isInteger(req.seq)||req.seq<0||req.seq>=1e9)throw new HttpsError('invalid-argument','강화 요청과 재료를 확인해 주세요.');
  const key=process.env.AI_DICE_KEY;if(!key)throw new HttpsError('internal','서버 강화 설정을 확인해 주세요.');const draw=createHmac('sha256',key).update('enhance:'+worldId+':'+uid+':'+req.seq).digest().readUInt32BE(0),worldRef=db.ref('worlds/'+worldId);let receipt,committed=false;
  try{const compactEnhancements=await compactEnhancementsEnabled(),result=await rewardTransaction(worldRef,raw=>{if(!raw)return;const next=applyEnhancement(raw,uid,req,Math.max(Date.now(),raw.updatedAt),draw);receipt=next.result;return next.world;},{compactEnhancements});if(!result.committed)throw Error('전황이 바뀌었습니다. 같은 요청으로 다시 확인해 주세요.');committed=true;const s=result.snapshot.val(),{historyFeed}=await import('./game.js');await db.ref('historyFeed/'+worldId).transaction(old=>old?.revision>s.revision?undefined:historyFeed(s));return await committedEnhancementResult(worldRef,s,req.id,receipt);}catch(error){console.warn('enhance-failed',error.message);throw new HttpsError('failed-precondition',error.message||'강화 결과를 확인하지 못했습니다.',{committed});}

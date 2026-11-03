@@ -1,4 +1,5 @@
 import {campaignEnabled,FIRST_CAMPAIGN_SEASON,isRetiredMissionCommand} from './campaign-policy.js';
+import {EnhancementQueue} from './enhancement-queue.js';
 import {campaignRequestState} from './campaign-pending.js';
 import {recordCache} from './record-cache.js';
 import {WorldReader,historyFeed} from './world-data.js';
@@ -105,6 +106,14 @@ export class FirebaseStore {
   async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
   async claimReward(ticketId,city){if(!canWrite(this))throw Error('최신 전황을 확인한 뒤 시도해 주세요.');const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
   enhancementKey(){return 'samguk-enhancement-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
+  enhancementQueue(){
+    const key=this.enhancementKey()+':local-v1';
+    if(this.localEnhancements?.key!==key){this.localEnhancements?.close();const uid=this.uid,scope=this.config.worldId;this.localEnhancements=new EnhancementQueue({key,uid,world:()=>this.world,now:()=>this.now(),connected:()=>!this.closed&&this.connected&&this.worldReady&&this.uid===uid&&this.config.worldId===scope,send:items=>this.callCampaign('enhanceArmy',{mode:'local-batch',worldId:scope,items}),refresh:()=>this.retryRead({worldOnly:true}),notify:()=>this.onEnhancement?.()});}
+    return this.localEnhancements;
+  }
+  localEnhancementPending(){if(!this.uid||!this.world)return false;try{return this.enhancementQueue().pending();}catch{return true;}}
+  queueEnhancement(city,ids,boosters){if(this.pendingEnhancement()||this.pendingCampaign()||this.campaignSyncPending()||!this.worldReady||!this.chatReady)throw Error('이전 명령과 최신 전황을 확인한 뒤 강화해 주세요.');return this.enhancementQueue().enqueue(city,ids,boosters);}
+  flushLocalEnhancements(options){if(this.uid&&this.world)this.enhancementQueue().flush(options).catch(()=>{});}
   pendingEnhancement(){try{const p=JSON.parse(globalThis.localStorage?.getItem(this.enhancementKey())||'null');return p&&p.worldId===this.config.worldId&&typeof p.id==='string'?p:null;}catch{return null;}}
   enhanceArmy(spec){return this.serialize(async()=>{
     if(!canWrite(this)||this.closed)throw Error('최신 전황을 다시 연결한 뒤 시도해 주세요.');
@@ -240,7 +249,7 @@ export class FirebaseStore {
   async performChat(text){
     if(seasonClosed(this.world,this.now()))throw new GameError('종료된 시즌은 채팅할 수 없습니다.','SEASON_CLOSED');
     if(this.config.seasons&&!worldWritable(this.config.worldId||'main',this.now()))throw new GameError('종료된 시즌은 채팅할 수 없습니다.','SEASON_CLOSED');
-    if(!canWrite(this))throw new GameError('전황과 채팅을 다시 확인한 뒤 보내 주세요.','OFFLINE');
+    if(!canWrite(this,{allowLocalEnhancement:true}))throw new GameError('전황과 채팅을 다시 확인한 뒤 보내 주세요.','OFFLINE');
     const name=this.world.players[this.uid]?.name||this.profileName;
     const checked=addChatMessage(this.chat,this.uid,name,text,this.now());text=Object.values(checked.messages).find(m=>m.seq===checked.sequence).text;
     let blocked=null;
@@ -251,7 +260,7 @@ export class FirebaseStore {
     if(!result.committed)throw blocked||new GameError('채팅을 보내지 못했어요. 다시 시도해 주세요.');
     this.chat=result.snapshot.val();this.onChat(this.chat);
   }
-  async close({signOut=false}={}){this.closed=true;clearTimeout(this.syncTimer);this.readers?.forEach(r=>r.close());this.reader?.close();this.stops.forEach(stop=>stop());this.stops=[];if(signOut&&this.auth)await this.authSdk.signOut(this.auth);this.connected=false;}
+  async close({signOut=false}={}){this.closed=true;this.localEnhancements?.close();clearTimeout(this.syncTimer);this.readers?.forEach(r=>r.close());this.reader?.close();this.stops.forEach(stop=>stop());this.stops=[];if(signOut&&this.auth)await this.authSdk.signOut(this.auth);this.connected=false;}
 }
 
 export function firebaseMessage(error){const code=String(error?.code||'');if(/popup-closed|cancelled-popup/.test(code))return '로그인 창을 닫았어요. 다시 로그인할 수 있습니다.';if(/unauthorized-domain/.test(code))return '이 접속 주소에서 구글 로그인을 사용할 수 있도록 전장 연결을 준비하고 있어요.';if(/operation-not-allowed/.test(code))return '구글 로그인 연결이 아직 준비되지 않았어요.';if(/permission|PERMISSION/.test(code)||/permission_denied/i.test(error?.message||''))return '명령을 저장하지 못했어요. 최신 전황과 접속 권한을 확인해 주세요.';if(/network/.test(code))return '인터넷 연결을 확인해 주세요.';return error?.message||'전장에 연결하지 못했어요.';}
