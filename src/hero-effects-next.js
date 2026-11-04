@@ -1,3 +1,4 @@
+import {recruitmentWeights} from './recruitment-policy.js';
 import {battleBond} from './bonds.js';
 import {campaignEnabled} from './campaign-policy.js';
 import {ruleMet} from './hero-rules-200.js';
@@ -40,7 +41,8 @@ export function economy(s,t,at){
   }
   if(n===90||n===106)interval=9*MINUTE;if([105].includes(n))capacity++;if(n===140&&at-since>=30*MINUTE)capacity++;if(n===131)interval=9.5*MINUTE;if([110,135].includes(n))d6=50;if(n===104)d8=25;if(n===150)d8=50;
   if(u?.heroVersion===3){if(n===47)capacity+=t.units.filter(x=>x.sides===4).length>=4?1:-1;if(n===105){capacity--;if(at-since>=20*MINUTE)capacity+=2;}const r=effectOf(u)?.rule;if(r&&at-since>=(r.prepare||0)*MINUTE){if(r.capacity)capacity+=r.capacity;if(r.interval)interval=Math.min(interval,r.interval*MINUTE);}}
-  return {interval,capacity,probabilities:[9000-d6-d8,700+d6,250+d8,50]};
+  const [d4,base6,base8,d12]=recruitmentWeights(s);
+  return {interval,capacity,probabilities:[d4-d6-d8,base6+d6,base8+d8,d12]};
 }
 export function regularRecruitBonus(s,t,at){
   const u=governor(s,t,at);if(!u)return null;

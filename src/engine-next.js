@@ -1,3 +1,4 @@
+import {LEGACY_RECRUITMENT_WEIGHTS,exhaustedRecruitTier,FIRST_RECRUITMENT_SEASON} from './recruitment-policy.js';
 import {enhancementEnabled,levelOf,failuresOf,ENHANCEMENT,diceWinProbability} from './enhancement-policy.js';
 import {rosterFor,catalogEffect} from './hero-catalog.js';
 import {campaignEnabled,nextEscapeAt} from './campaign-policy.js';
@@ -81,7 +82,7 @@ function resolveGuard(s,uid,c,now){
 export const capacityOf=(id,s=null,at=s?.projectedAt??s?.updatedAt??0)=>s?.featureVersion>=3?economy(s,s.territories[id],at).capacity:baseCapacity(id);
 export const nextRecruitAt=t=>t.owner?(t.nextRecruitAt??t.lastRecruitAt+RULES.recruitMs):0;
 export const restartAvailableAt=p=>p?.life>0?p.eliminatedAt+RULES.restartMs:0;
-export function unitTier(roll,probabilities=[9000,700,250,50]){let n=roll*10000;for(let i=0;i<4;i++){if(n<probabilities[i])return [4,6,8,12][i];n-=probabilities[i];}return 12;}
+export function unitTier(roll,probabilities=LEGACY_RECRUITMENT_WEIGHTS){let n=roll*10000;for(let i=0;i<4;i++){if(n<probabilities[i])return [4,6,8,12][i];n-=probabilities[i];}return 12;}
 export const emptyRoles=()=>({governor:'',defense:[],support:'',supportManual:'',supportChangeAt:0,retreat:'',guardTarget:'',policyVersion:1,policySeed:'',governorSince:0,defenseSince:0,governorChangeAt:0,defenseChangeAt:0});
 const countUnits=s=>Object.values(s.territories).reduce((n,t)=>n+t.units.length,0)+Object.values(s.returnQueues||{}).reduce((n,q)=>n+q.units.length,0);
 function heroIndex(s){const out={};const add=(u,owner,location)=>{if(!u.heroId)return;requireGame(!out[u.heroId],'같은 무장이 전장에 두 명 있습니다.','CORRUPT');out[u.heroId]={unitId:u.id,owner,...location};};for(const t of Object.values(s.territories))t.units.forEach((u,slot)=>add(u,t.owner,{kind:'territory',territoryId:t.id,slot}));for(const [uid,q] of Object.entries(s.returnQueues||{}))q.units.forEach((u,slot)=>add(u,uid,{kind:'queue',territoryId:'',slot}));if(campaignEnabled(s))for(const p of Object.values(s.campaign?.captives||{}))add(p.unit,p.owner,{kind:'captive',territoryId:'',slot:0});return out;}
@@ -121,6 +122,7 @@ export function normalizeWorld(raw){
   if(raw?.featureVersion!==6)return V4.normalizeWorld(raw);
   requireGame(raw.version===1&&raw.mapId===MAP.mapId,'전장 저장 버전이 다릅니다. 기존 기록을 보존했어요.','VERSION');const s=structuredClone(raw);
   for(const key of ['players','requests','history','receipts','returnQueues','heroIndex','pendingBattles'])s[key]??={};
+  requireGame(s.season?.recruitmentVersion===undefined||s.season.recruitmentVersion===2&&s.season.number>=FIRST_RECRUITMENT_SEASON,'충원 정책 기록을 확인해 주세요.','CORRUPT');
   normalizeCampaign(s);requireGame(s.rolePolicyVersion===1&&rosterFor(s).every(e=>s.heroCatalog?.[e.id]===e.name),'자동 배정 정책이나 무장 명단 기록을 확인해 주세요.','CORRUPT');
   for(const [id,p] of Object.entries(s.pendingBattles)){
     requireGame(p.id===id&&s.players[p.actor]&&Array.isArray(p.unitIds)&&Array.isArray(p.candidates)&&p.deadline===p.at+GUARD_CHOICE_MS&&p.locks?.[p.from]&&p.locks?.[p.to]&&s.territories[p.from]&&s.territories[p.to],'호위 선택 기록을 확인해 주세요.','CORRUPT');
@@ -154,7 +156,7 @@ function placeQueued(s,at){let changed=false;for(const [uid,q] of Object.entries
      u.readyAt=Math.max(u.readyAt,at+RULES.actionMs);if(u.sides>4)u.moveReadyAt=Math.max(u.moveReadyAt,at+RULES.actionMs);stampUnit(u,at,t.id);t.units.push(u);q.units=q.units.filter(x=>x.id!==u.id);if(origin)delete q.capacityOrigins[u.id];changed=true;
    }if(!q.units.length)delete s.returnQueues[uid];
  }return changed;}
-function spawnRecruit(s,t,at){const rng=seededRandom(`${s.seed}:${t.id}:${t.generation}:${at}`);let sides=unitTier(rng(),economy(s,t,at).probabilities),e=null;if(sides>4){const pool=rosterFor(s).filter(e=>e.sides===sides&&!s.heroIndex[e.id]);if(pool.length)e=pool[Math.floor(rng()*pool.length)];else sides=4;}const u={id:`recruit:${t.id}:${t.generation}:${at}`,name:e?.name||'병사',sides,readyAt:at};if(e){u.heroId=e.id;u.heroVersion=campaignEnabled(s)?3:2;u.effectState=newEffectState();}return stampUnit(u,at,t.id);}
+function spawnRecruit(s,t,at){const rng=seededRandom(`${s.seed}:${t.id}:${t.generation}:${at}`);let sides=unitTier(rng(),economy(s,t,at).probabilities),e=null;if(sides>4){const pool=rosterFor(s).filter(e=>e.sides===sides&&!s.heroIndex[e.id]);if(pool.length)e=pool[Math.floor(rng()*pool.length)];else sides=exhaustedRecruitTier(s,sides);}const u={id:`recruit:${t.id}:${t.generation}:${at}`,name:e?.name||(sides===6?'이름 없는 부장':'병사'),sides,readyAt:at,...(!e&&sides===6?{legacy:true}:{})};if(e){u.heroId=e.id;u.heroVersion=campaignEnabled(s)?3:2;u.effectState=newEffectState();}return stampUnit(u,at,t.id);}
 function bonusSoldier(t,at,tag){return stampUnit({id:`bonus:${t.id}:${t.generation}:${at}:${tag}`,name:'병사',sides:4,readyAt:at},at,t.id);}
 function nextEffectEvents(s,now,cursor){const events=[];for(const t of Object.values(s.territories)){if(!t.owner||isLocked(s,t.id))continue;const localCursor=t.settledAt??cursor;for(const unit of t.units)if(unit.readyAt>localCursor&&unit.readyAt<=now)events.push({at:unit.readyAt,t,type:'roles'});if(t.nextRecruitAt&&t.nextRecruitAt<=now)events.push({at:Math.max(localCursor,t.nextRecruitAt),t,type:'regular'});const u=governor(s,t,localCursor),n=effectNumber(u);if(!u)continue;const prepareMinutes=u.heroVersion===3?(n===105?20:effectOf(u)?.rule?.prepare||30):30,prepared=preparedSince(t,u)+prepareMinutes*MINUTE,st=u.effectState;if(([94,140].includes(n)||u.heroVersion===3&&(n===105||effectOf(u)?.rule?.capacity||effectOf(u)?.rule?.interval&&effectOf(u)?.rule?.prepare))&&prepared<=now&&st.capacityStamp!==prepared)events.push({at:Math.max(localCursor,prepared),t,u,type:'capacity'});const giftAt=Math.max(localCursor,prepared);if([81,111].includes(n)&&!st.firstGift&&giftAt<=now&&t.units.length<capacityOf(t.id,s,giftAt))events.push({at:giftAt,t,u,type:'gift'});}return events.sort((a,b)=>a.at-b.at||a.t.id.localeCompare(b.t.id)||a.type.localeCompare(b.type));}
 export function hasDueRecruitment(s,now){if(s.featureVersion!==6)return V4.hasDueRecruitment(s,now);return campaignEnabled(s)&&Object.values(s.campaign?.captives||{}).some(p=>Math.min(nextEscapeAt(p),p.request?.expiresAt||Infinity)<=now)||Object.values(s.pendingBattles||{}).some(p=>p.deadline<=now)||nextEffectEvents(s,now,s.updatedAt).length>0||Object.entries(s.returnQueues||{}).some(([uid])=>ownedTerritories(s,uid).some(t=>!isLocked(s,t.id)&&t.units.length<capacityOf(t.id,s,now)));}
@@ -169,7 +171,7 @@ export function settleRecruitment(s,now){
     else if(type==='gift'){if(t.units.length<capacityOf(t.id,s,at)){t.units.push(bonusSoldier(t,at,'mizhu'));u.effectState.firstGift=true;}}
     else if(t.units.length<capacityOf(t.id,s,at)){
       const unit=spawnRecruit(s,t,at);t.units.push(unit);refreshIndexes(s);const giver=regularRecruitBonus(s,t,at);if(giver&&t.units.length<capacityOf(t.id,s,at))t.units.push(bonusSoldier(t,at,giver.id));if(bondBonus(s,t,at)&&t.units.length<capacityOf(t.id,s,at))t.units.push(bonusSoldier(t,at,'bond'));
-      if(heroNewsAllowed(unit,at))news.push({id:unit.id,type:'hero',at,actor:t.owner,to:t.id,unit:structuredClone(unit),text:`${s.players[t.owner].name} 군주의 ${placeInfo(t.id).ko}에 ${TIERS[unit.sides]} ${unit.name}(D${unit.sides})이 합류했습니다.`});
+      if(heroNewsAllowed(unit,at))news.push({id:unit.id,type:'hero',at,actor:t.owner,to:t.id,unit:structuredClone(unit),text:`${s.players[t.owner].name} 군주의 ${placeInfo(t.id).ko}에 ${unit.heroId?TIERS[unit.sides]+' ':''}${unit.name}(D${unit.sides})이 합류했습니다.`});
       t.lastRecruitAt=at;t.cycleMs=economy(s,t,at).interval;t.nextRecruitAt=at+t.cycleMs;
     }else t.nextRecruitAt=0;
     if(t.units.length>=capacityOf(t.id,s,at)){t.nextRecruitAt=0;t.lastRecruitAt=at;}
