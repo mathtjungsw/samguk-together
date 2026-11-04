@@ -4,6 +4,11 @@ import {packSparkRecords} from '../src/spark-records.js';
 import {sparkReward} from '../src/spark-reward.js';
 import {campaignCommand} from '../server/campaign-command.js';
 import {refreshIndexes} from '../src/engine-next.js';
+import {currentWorldId} from '../tools/current-world.mjs';
+test('release discovery uses the migrated active season without reading old world paths',async()=>{
+ const paths=[],api={get:async path=>{paths.push(path);return {body:path==='/seasonIndex.json'?{'season-4':{}}:null};}};
+ assert.equal(await currentWorldId(api,{worldRoot:'sparkWorlds',initialWorld:'season-5'}),'season-5');assert.deepEqual(paths,['/seasonIndex.json','/sparkWorlds/season-5/season/endedAt.json']);
+});
 test('cross-project pending import preserves original draws and IDs once, scoped to user',()=>{
  const map=new Map([['samguk-enhancement-pending:old:uid:season-5:local-v1','{"draw":123}'],['samguk-campaign-pending:old:uid:season-5','{"id":"original-id","seq":7}'],['samguk-campaign-pending:old:other:season-5','private']]);const storage={get length(){return map.size;},key:i=>[...map.keys()][i],getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v)};
  importSparkPending(storage,'old','new','uid');assert.equal(map.get('samguk-enhancement-pending:new:uid:season-5:local-v1'),'{"draw":123}');assert.equal(map.has('samguk-campaign-pending:new:other:season-5'),false);map.delete('samguk-campaign-pending:new:uid:season-5');importSparkPending(storage,'old','new','uid');assert.equal(map.has('samguk-campaign-pending:new:uid:season-5'),false);assert.equal(map.has('samguk-campaign-pending:old:uid:season-5'),true);

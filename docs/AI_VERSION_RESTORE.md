@@ -10,6 +10,7 @@
 - 로컬 운영 데이터/규칙 백업: `playtest/ai-version-backup-2026-11-05/`. `database.json`, 원본 규칙, SHA256 manifest와 최종 동결 전장/이관 증거를 보관한다. 개인정보가 포함되므로 GitHub에 올리지 않는다.
 - Firebase 원래 `/worlds`, `/chat`, `/battleRecords`, `/enhancementRecords`도 보존한다. 무료 전장은 `/sparkWorlds` 등 별도 경로다.
 - 함수의 배포용 환경 설정 `functions/.env.samguk-together`는 기존 로컬 파일을 보존한다. 비밀키는 Git에 추가하지 않는다.
+- 전환 완료 시 기존 `samguk-together`와 신규 `samguk-friends-20261105` 모두 Spark이며 결제 연결이 없다. 기존 서버 함수9개는 삭제했다. Google 로그인은 기존 프로젝트 소유 OAuth 클라이언트를 계속 사용하므로 기존 프로젝트나 해당 클라이언트는 삭제하지 않는다.
 
 ## 사용자가 AI 복원을 요청했을 때의 절차
 
@@ -18,7 +19,7 @@
 1. 무료 버전의 최신 코드와 DB를 다시 백업한다. 현재 `/sparkWorlds` 진행을 무시하고 11월5일 스냅샷으로 덮어쓰지 않는다.
 2. `/runtimeMode/mode`를 일시적으로 `restoring-ai`로 설정해 무료 클라이언트 쓰기를 차단한다. 무료 전장들의 최신 병력·장수·포로·강화·재시도 기록과 채팅/상세를 보관한다.
 3. 새 유료 서비스 없이 기존 프로젝트를 Blaze로 재연결한다. AI 서버 함수 재배포와 운영 비용이 다시 생길 수 있음을 알린다.
-4. 복원용 별도 체크아웃에 AI 태그의 소스를 준비한다. 이를 최신 main 위에 복원 커밋으로 만들어 이력을 보존한다. main을 강제 되감기하지 않는다.
+4. 복원용 별도 체크아웃에 AI 태그의 소스를 준비한다. 이를 최신 main 위에 복원 커밋으로 만들어 이력을 보존한다. main을 강제 되감기하지 않는다. 백업 이후 확인된 비동기 트랜잭션 재시도 중 예외에 의한 대기 문제 수정(`83a2eca`, `server/reward-transaction.js`)과 해당 회귀 테스트도 반드시 포함한다.
 5. 무료 운영 이후 생긴 모든 시즌의 최신 전장을 `/worlds`로 복사한다. `executionMode`, `sparkVersion`, `sparkTickets`는 무료 전용 메타데이터로 분리하고, 원래 AI 메타데이터가 있는 세력은 보존한다. 새 시즌에서 AI가 없었다면 기존 서버의 중도 활성화 정책으로 준비한다. 병력·명단·강화·대기·포로·시즌 시작/마감은 바꾸지 않는다.
 6. 무료 버전에서 사용한 D12권 상태를 원래 `rewardTickets`에 반영해 재지급을 막는다. 새 `battleRecords`/`enhancementRecords`/`recordVersions`와 채팅도 복사한다. 원본 및 무료 경로는 검증이 끝날 때까지 삭제하지 않는다.
 7. `npm test`, `npm run test:rules`, `npm run build`와 실제 복원 데이터 정규화를 검증하고 Firebase 함수/규칙과 Pages를 배포한다. AI enabled는 마지막까지 끈다.

@@ -1,6 +1,6 @@
-## 무료 운영 버전 · 전환 진행 중 (2026-11-05)
+## 무료 운영 버전 · 전환·배포 완료 (2026-11-05)
 
-AI 없는 친구 전장 코드다. 새 Firebase Spark 프로젝트는 `samguk-friends-20261105`이며 기존 Google 계정 UID와 현재 진행을 보존해 옮긴다. Google 로그인 주소 저장·시즌5 최신 전장 이관과 데이터 보존 검증을 완료했다. 기존 AI 서버 함수는 삭제했으며 AI 세력·병력은 보존한다. 웹 배포와 기존 프로젝트 결제 연결 해제는 마무리 중이다. [구현·운영 상태](docs/UPDATE_2026-11-05_SPARK_NO_AI.md), [AI 버전 복원](docs/AI_VERSION_RESTORE.md).
+AI 없는 친구 전장 코드다. 새 Firebase Spark 프로젝트 `samguk-friends-20261105`로 기존 Google 계정10개의 UID와 현재 진행을 보존해 이전했다. 승인된 Google 로그인 주소 저장·실제 인증·시즌5 전장 보존을 확인했다. 기존 서버 함수9개를 삭제하고 기존/신규 프로젝트 모두 결제 연결을 해제한 Spark 상태를 확인했다. 이번 시즌 AI의 세력·병력은 보존하고 자동 행동만 중지하며 다음 시즌부터 생성하지 않는다. 웹 배포와 공개 실행 파일 대조·전체 공지를 완료했다. [구현·운영 상태](docs/UPDATE_2026-11-05_SPARK_NO_AI.md), [AI 버전 복원](docs/AI_VERSION_RESTORE.md).
 
 무료 버전에서 배포는 `npm run rules:generate` → `npm test` → `npm run test:rules` → `npm run build` → `firebase deploy --only database --project samguk-friends-20261105`와 기존 GitHub Pages 절차다. 함수 배포 항목을 제거했으며 클라이언트 실행/원자 변경분 쓰기를 사용한다. 게임은 Google 로그인한 친구들을 신뢰하는 구조이며 모든 전투를 서버에서 검증하는 부정행위 방지 시스템은 아니다. 무료 한도 초과 시 서비스가 제한될 수 있다.
 
