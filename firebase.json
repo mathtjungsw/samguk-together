@@ -13,15 +13,5 @@
       "enabled": false
     },
     "singleProjectMode": true
-  },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs22",
-    "predeploy": [
-      "node tools/build-functions.mjs"
-    ],
-    "postdeploy": [
-      "node tools/configure-ai-callable.mjs"
-    ]
   }
 }

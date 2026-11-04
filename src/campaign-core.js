@@ -31,7 +31,7 @@ export function settleCampaign(s,at){
   let escaped=false;while(p.escapeRound<9&&p.at+CAPTIVE.first+p.escapeRound*CAPTIVE.step<=limit){const round=p.escapeRound++,due=p.at+CAPTIVE.first+round*CAPTIVE.step,draw=randomFor('escape:'+s.season.id+':'+p.id+':'+p.at+':'+round);p.lastEscapeAt=due;p.lastEscapePassed=draw<CAPTIVE.chance;if(p.lastEscapePassed){releaseCaptive(s,p,at,'escape');escaped=true;break;}}
   if(!escaped&&p.deadline<=limit)releaseCaptive(s,p,at,'deadline');
   else if(!escaped&&p.request?.expiresAt<=limit)delete p.request;
-  if(c.captives[p.id]&&s.players[p.owner].kind==='ai'&&!p.request&&at>=p.at+10*MINUTE){const count=CAPTIVE.ransom[p.unit.sides],materials=defaultMaterials(s,p.owner,count,at),city=ownedTerritories(s,p.owner).find(t=>!isLocked(s,t.id));if(materials.length===count&&city){p.request={id:'ai-ransom-'+p.id,city:city.id,materials,at,expiresAt:Math.min(at+10*MINUTE,p.deadline)};if(s.players[p.captor].kind==='ai'){const dest=ownedTerritories(s,p.captor).find(t=>!isLocked(s,t.id));if(dest)acceptRansom(s,p,p.captor,dest.id,at);}}}
+  if(s.executionMode!=='spark'&&c.captives[p.id]&&s.players[p.owner].kind==='ai'&&!p.request&&at>=p.at+10*MINUTE){const count=CAPTIVE.ransom[p.unit.sides],materials=defaultMaterials(s,p.owner,count,at),city=ownedTerritories(s,p.owner).find(t=>!isLocked(s,t.id));if(materials.length===count&&city){p.request={id:'ai-ransom-'+p.id,city:city.id,materials,at,expiresAt:Math.min(at+10*MINUTE,p.deadline)};if(s.players[p.captor].kind==='ai'){const dest=ownedTerritories(s,p.captor).find(t=>!isLocked(s,t.id));if(dest)acceptRansom(s,p,p.captor,dest.id,at);}}}
  }
  updateBounty(s,limit);
 }

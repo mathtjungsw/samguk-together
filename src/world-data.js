@@ -1,3 +1,4 @@
+import {sparkPath} from './spark-policy.js';
 // Canonical battles stay untouched. The validated feed omits dice and unit copies.
 export const WORLD_FIELDS=['version','mapId','seed','createdAt','updatedAt','revision','command','players','territories','requests','receipts','returnQueues','heroCatalog','heroIndex','pendingBattles','featureVersion','rosterVersion','effectsVersion','effectsSince','rolePolicyVersion','statsSince','roleMigration','capacityMigration','migration','maintenance','release','season'];
 const list=v=>Array.isArray(v)?v:Object.values(v||{});
@@ -13,30 +14,30 @@ export const historyFeed=s=>({revision:s.revision,events:Object.fromEntries(Obje
 export const feedValid=(feed,revision)=>!!feed&&feed.revision===revision&&typeof feed.events==='object';
 export const coherentWorld=s=>s.revision===0||s.command?.baseRevision+1===s.revision&&s.command?.at===s.updatedAt;
 export class WorldReader{
-  constructor(sdk,db,id,{onWorld=()=>{},onError=()=>{},cache=null}={}){Object.assign(this,{sdk,db,id,onWorld,onError,cache});this.stops=[];this.raw={};this.ready=new Set();this.details=new Map();this.reading=null;this.fallbacks=0;}
+  constructor(sdk,db,id,{onWorld=()=>{},onError=()=>{},cache=null,config={}}={}){Object.assign(this,{sdk,db,id,onWorld,onError,cache,config});this.stops=[];this.raw={};this.ready=new Set();this.details=new Map();this.reading=null;this.fallbacks=0;}
   ref(path){return this.sdk.ref(this.db,path);}
-  group(side){return this.sdk.query(this.ref('worlds/'+this.id),this.sdk.orderByKey(),side==='before'?this.sdk.endBefore('history'):this.sdk.startAfter('history'));}
+  group(side){return this.sdk.query(this.ref(sparkPath(this.config,'worlds',this.id)),this.sdk.orderByKey(),side==='before'?this.sdk.endBefore('history'):this.sdk.startAfter('history'));}
   async get(path){return (await this.sdk.get(this.ref(path))).val();}
   async read(){if(this.reading)return this.reading;this.reading=this.readStable().finally(()=>this.reading=null);return this.reading;}
   async readStable(){
-    const path='worlds/'+this.id;
+    const path=sparkPath(this.config,'worlds',this.id);
     for(let attempt=0;attempt<3;attempt++){
       const before=await this.get(path+'/revision');if(before===null)return null;
       if(this.sdk.onValue)await this.connect();
       const groups=this.sdk.onValue?[...this.groups]:await Promise.all(['before','after'].map(k=>this.sdk.get(this.group(k)).then(s=>s.val()||{}))),raw={...groups[0],...groups[1]};
-      const feed=this.sdk.onValue?this.feed:await this.get('historyFeed/'+this.id);raw.history=feedValid(feed,raw.revision)?feed.events:await this.readHistory();
+      const feed=this.sdk.onValue?this.feed:await this.get(sparkPath(this.config,'historyFeed',this.id));raw.history=feedValid(feed,raw.revision)?feed.events:await this.readHistory();
       if(coherentWorld(raw)&&raw.revision===before&&await this.get(path+'/revision')===before){if(!feedValid(feed,raw.revision))this.historyRevision=raw.revision;this.raw=raw;this.feed=feed;this.groups=groups;return structuredClone(raw);}
     }
     throw Error('전황이 빠르게 바뀌고 있습니다. 잠시 후 다시 연결해 주세요.');
   }
-  async readHistory(){this.fallbacks++;return await this.get('worlds/'+this.id+'/history')||{};}
+  async readHistory(){this.fallbacks++;return await this.get(sparkPath(this.config,'worlds',this.id)+'/history')||{};}
   connect(){
     if(this.streamReady)return this.streamReady;
     this.streamReady=new Promise((resolve,reject)=>{this.resolveReady=resolve;this.rejectReady=reject;});
     const received=key=>{this.ready.add(key);if(this.ready.size===3)this.resolveReady();this.schedule();};
     const failed=e=>{this.rejectReady(e);this.onError(e);};
     for(const [index,side]of ['before','after'].entries())this.stops.push(this.sdk.onValue(this.group(side),snap=>{this.groups??=[];this.groups[index]=snap.val()||{};this.raw={...this.groups[0],...this.groups[1],history:this.raw.history};received(side);},failed));
-    this.stops.push(this.sdk.onValue(this.ref('historyFeed/'+this.id),snap=>{this.feed=snap.val();received('feed');},failed));
+    this.stops.push(this.sdk.onValue(this.ref(sparkPath(this.config,'historyFeed',this.id)),snap=>{this.feed=snap.val();received('feed');},failed));
     return this.streamReady;
   }
   start(){
@@ -61,12 +62,12 @@ export class WorldReader{
     }finally{this.flushing=false;}
   }
   async detail(id){const key='battle:'+this.id+':'+id,summary=this.feed?.events?.[id]||this.raw.history?.[id],signature=summary?JSON.stringify(summary):'';let version;
-    try{version=summary?.detailVersion||await this.get('recordVersions/'+this.id+'/battles/'+id)||'no-stamp';version+=':'+signature;}catch(error){const offline=await this.cache?.get(key,undefined);if(offline?.result)return {...offline,localUnverified:true};throw Error('기록의 최신 상태를 확인하지 못했습니다. 연결 후 다시 열어 주세요.');}
+    try{version=summary?.detailVersion||await this.get(sparkPath(this.config,'recordVersions',this.id)+'/battles/'+id)||'no-stamp';version+=':'+signature;}catch(error){const offline=await this.cache?.get(key,undefined);if(offline?.result)return {...offline,localUnverified:true};throw Error('기록의 최신 상태를 확인하지 못했습니다. 연결 후 다시 열어 주세요.');}
     const held=this.details.get(id);if(held?.version===version)return structuredClone(held.data);
     const saved=await this.cache?.get(key,version);if(saved?.id===id&&saved.result&&Array.isArray(saved.result.attack)&&Array.isArray(saved.result.defend)&&Number.isFinite(saved.result.score)){this.details.set(id,{version,data:saved});return structuredClone(saved);}
     let e;
-    if(summary?.detailVersion){const path='battleRecords/'+this.id+'/'+id+'/'+summary.detailVersion;e=await this.get(path);if(!e?.result)e=await this.get('worlds/'+this.id+'/recordOutbox/'+summary.detailVersion+'/event');if(!e?.result)e=await this.get(path);}
-    else{e=await this.get('worlds/'+this.id+'/history/'+id);if(e?.detailVersion&&!e.result)e=await this.get('battleRecords/'+this.id+'/'+id+'/'+e.detailVersion)||await this.get('worlds/'+this.id+'/recordOutbox/'+e.detailVersion+'/event');}
+    if(summary?.detailVersion){const path=sparkPath(this.config,'battleRecords',this.id)+'/'+id+'/'+summary.detailVersion;e=await this.get(path);if(!e?.result)e=await this.get(sparkPath(this.config,'worlds',this.id)+'/recordOutbox/'+summary.detailVersion+'/event');if(!e?.result)e=await this.get(path);}
+    else{e=await this.get(sparkPath(this.config,'worlds',this.id)+'/history/'+id);if(e?.detailVersion&&!e.result)e=await this.get(sparkPath(this.config,'battleRecords',this.id)+'/'+id+'/'+e.detailVersion)||await this.get(sparkPath(this.config,'worlds',this.id)+'/recordOutbox/'+e.detailVersion+'/event');}
     if(!e?.result)throw Error('이 전투의 상세 기록이 보관 범위를 벗어났습니다.');
     if(!this.raw.pendingBattles?.[id])await this.cache?.put(key,version,e);this.details.set(id,{version,data:e});if(this.details.size>12)this.details.delete(this.details.keys().next().value);return structuredClone(e);
   }

@@ -2,15 +2,19 @@
   "enabled": true,
   "worldId": "main",
   "firebase": {
-    "apiKey": "AIzaSyDXikeOYtR_AihihT2LBBpX7HgrpCWR0dg",
-    "authDomain": "samguk-together.firebaseapp.com",
-    "databaseURL": "https://samguk-together-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "projectId": "samguk-together",
-    "storageBucket": "samguk-together.firebasestorage.app",
-    "messagingSenderId": "657800626120",
-    "appId": "1:657800626120:web:59e38680fe0e6f8121cafd"
+    "projectId": "samguk-friends-20261105",
+    "appId": "1:373196566149:web:fbb66e6ca9286054ff83ec",
+    "databaseURL": "https://samguk-friends-20261105-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "storageBucket": "samguk-friends-20261105.firebasestorage.app",
+    "apiKey": "AIzaSyDs0ZLkhRpgKV0nSG6qVJGZ-_VdTmxxrJ8",
+    "authDomain": "samguk-friends-20261105.firebaseapp.com",
+    "messagingSenderId": "373196566149",
+    "projectNumber": "373196566149",
+    "version": "2"
   },
   "emulators": false,
   "compactSync": true,
-  "aiServerEnabled": true
+  "aiServerEnabled": false,
+  "executionMode": "spark",
+  "previousProjectId": "samguk-together"
 }

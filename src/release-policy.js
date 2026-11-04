@@ -1,6 +1,6 @@
 export const D6_NEWS_SINCE=Date.parse('2026-10-28T14:00:00+09:00');
-export const RELEASE_ID='update-20261104-season6-recruitment';
-export const RELEASE_TEXT='📣 다음 시즌(시즌6)부터 충원 확률 D4 90%·D6 7%·D8 2.2%·D12 0.8%로 변경됩니다. 고유 D6가 모두 등장하면 특기 없는 이름 없는 D6 부장이 충원됩니다. D8·D12 소진 시 D4 대체는 유지합니다. 현재 시즌5의 규칙과 병력은 그대로입니다. 새로고침해 주세요.';
+export const RELEASE_ID='update-20261105-spark-no-ai';
+export const RELEASE_TEXT='📣 무료 운영 전장으로 전환했습니다. 이번 시즌 AI는 자동 행동만 멈추고 영토·병력을 보존하며 다음 시즌부터 AI 없이 시작합니다. 공격·이동·강화는 기기에서 계산해 전황에 안전하게 저장합니다. 접속이 없어도 다음 접속 때 충원·탈출·시즌 경과를 정산합니다. 새로고침해 주세요.';
 export const heroNewsAllowed=(u,at)=>[8,12].includes(u.sides)||u.sides===6&&at>=D6_NEWS_SINCE;
 // A newer release may replace the banner while this older tab is still open.
 // Its receipt means this client must not repeatedly announce its old release.

@@ -1,0 +1,10 @@
+import fs from 'node:fs';import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),auth=require('../node_modules/firebase-tools/lib/auth.js'),{requireAuth}=require('../node_modules/firebase-tools/lib/requireAuth.js'),{Client}=require('../node_modules/firebase-tools/lib/apiv2.js');
+export const config=JSON.parse(fs.readFileSync('firebase-config.json','utf8'));
+await requireAuth({project:config.firebase.projectId,...auth.getGlobalDefaultAccount(),nonInteractive:true});
+export const api=new Client({urlPrefix:config.firebase.databaseURL,auth:true});
+const sourceFile='playtest/ai-version-backup-2026-11-05/firebase-config.json';
+export const sourceConfig=fs.existsSync(sourceFile)?JSON.parse(fs.readFileSync(sourceFile,'utf8')):config;
+export const sourceApi=new Client({urlPrefix:sourceConfig.firebase.databaseURL,auth:true});
+export const billing=require('../node_modules/firebase-tools/lib/gcp/cloudbilling.js');
+export const cloud=new Client({urlPrefix:'https://cloudbilling.googleapis.com',apiVersion:'v1',auth:true});

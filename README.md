@@ -1,3 +1,9 @@
+## 무료 운영 버전 · 전환 진행 중 (2026-11-05)
+
+AI 없는 친구 전장 코드다. 새 Firebase Spark 프로젝트는 `samguk-friends-20261105`이며 기존 Google 계정 UID와 현재 진행을 보존해 옮긴다. 현재는 로그인 반환 주소 저장 직전 확인 대기로 실제 사이트는 아직 이전 버전이다. 기존 AI 자동 실행은 중지했다. [구현·운영 상태](docs/UPDATE_2026-11-05_SPARK_NO_AI.md), [AI 버전 복원](docs/AI_VERSION_RESTORE.md).
+
+무료 버전에서 배포는 `npm run rules:generate` → `npm test` → `npm run test:rules` → `npm run build` → `firebase deploy --only database --project samguk-friends-20261105`와 기존 GitHub Pages 절차다. 함수 배포 항목을 제거했으며 클라이언트 실행/원자 변경분 쓰기를 사용한다. 게임은 Google 로그인한 친구들을 신뢰하는 구조이며 모든 전투를 서버에서 검증하는 부정행위 방지 시스템은 아니다. 무료 한도 초과 시 서비스가 제한될 수 있다.
+
 ## 2026-11-04 충원 정책 · 시즌6부터
 
 시즌5는 D4 90% / D6 7% / D8 2.5% / D12 0.5% 및 등급 소진 시 D4 대체를 유지한다. **시즌6부터 새로 생성하는 전장**에는 `season.recruitmentVersion=2`를 저장하고 D4 90% / D6 7% / D8 2.2% / D12 0.8%를 적용한다. 정책 없는 기존 전장은 자동 변경하지 않는다.

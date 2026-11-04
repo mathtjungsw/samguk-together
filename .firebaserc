@@ -1,3 +1,6 @@
 {
-  "projects": { "default": "samguk-together" }
+  "projects": {
+    "default": "samguk-friends-20261105",
+    "ai-backup": "samguk-together"
+  }
 }

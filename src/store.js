@@ -1,3 +1,4 @@
+import {sparkEnabled,sparkPath,importSparkPending} from './spark-policy.js';
 import {campaignEnabled,FIRST_CAMPAIGN_SEASON,isRetiredMissionCommand} from './campaign-policy.js';
 import {EnhancementQueue} from './enhancement-queue.js';
 import {campaignRequestState} from './campaign-pending.js';
@@ -37,7 +38,7 @@ export class FirebaseStore {
   campaignKey(){return 'samguk-campaign-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
   pendingCampaign(){let pending=this.campaignPending||null;try{pending=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null')||pending;}catch{}if(pending&&(isRetiredMissionCommand(pending.type)||pending.worldId&&pending.worldId!==this.config.worldId||campaignRequestState(this.world,this.uid,pending,this.config.worldId)!=='unknown')){this.clearCampaignPending(pending);return null;}return pending;}
   saveCampaignPending(req){this.campaignPending=req;try{if(req)globalThis.localStorage?.setItem(this.campaignKey(),JSON.stringify(req));else globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
-  async callCampaign(name,data){const f=await import('firebase/functions');return (await f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),name)(data)).data;}
+  async callCampaign(name,data){if(sparkEnabled(this.config)){const {sparkCall}=await import('./spark-store.js');return sparkCall(this,name,data);}const f=await import('firebase/functions');return (await f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),name)(data)).data;}
   clearCampaignPending(request){if(this.campaignPending?.id===request.id)this.campaignPending=null;try{const saved=JSON.parse(globalThis.localStorage?.getItem(this.campaignKey())||'null');if(saved?.id===request.id)globalThis.localStorage?.removeItem(this.campaignKey());}catch{}}
   syncKey(){return this.campaignKey()+':confirmed';}
   campaignSyncPending(){
@@ -85,7 +86,7 @@ export class FirebaseStore {
     // or sequence of an uncertain request to make an old attack run again.
     if(pending){await this.retryRead();state=campaignRequestState(this.world,this.uid,pending,this.config.worldId);if(state!=='unknown'){if(pending.id===spec.id)return this.campaignRecovered(pending,state);this.clearCampaignPending(pending);pending=null;}else if(pending.id!==spec.id)throw Error('처리 상태를 자동 확인 중입니다. 잠시 후 다시 시도해 주세요.');}
     if(this.closed||spec.worldId&&spec.worldId!==this.config.worldId)throw new GameError('전장이 바뀌었습니다. 최신 화면에서 다시 확인해 주세요.','STALE_COMMAND');
-    const request=pending||{...spec,seq:this.world.players[this.uid]?.commandSeq||0,worldId:this.config.worldId};this.saveCampaignPending(request);
+    const request=pending||{...spec,seq:this.world.players[this.uid]?.commandSeq||0,worldId:this.config.worldId,...(sparkEnabled(this.config)?{draw:entropy()}:{})};this.saveCampaignPending(request);
     let data;
     try{data=await this.callCampaign('campaignOrder',request);}
     catch(error){
@@ -103,8 +104,8 @@ export class FirebaseStore {
     return {...data,world:this.world,...(this.campaignSyncPending()?{syncPending:true}:{})};
   }
   campaignAction(spec){return this.serialize(()=>this.performCampaign({...spec,id:spec.id||commandId()}));}
-  async aiChoice(count){const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
-  async claimReward(ticketId,city){if(!canWrite(this))throw Error('최신 전황을 확인한 뒤 시도해 주세요.');const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
+  async aiChoice(count){if(sparkEnabled(this.config))return null;const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'aiRulerChoice');return (await call({worldId:this.config.worldId,...(count===undefined?{}:{count})})).data;}
+  async claimReward(ticketId,city){if(sparkEnabled(this.config))return this.callCampaign('rulerReward',{ticketId,city,worldId:this.config.worldId});if(!canWrite(this))throw Error('최신 전황을 확인한 뒤 시도해 주세요.');const f=await import('firebase/functions'),call=f.httpsCallable(f.getFunctions(this.app,'asia-southeast1'),'rulerReward');const result=(await call({ticketId,city})).data;await this.retryRead();return result;}
   enhancementKey(){return 'samguk-enhancement-pending:'+this.config.firebase?.projectId+':'+this.uid+':'+this.config.worldId;}
   enhancementQueue(){
     const key=this.enhancementKey()+':local-v1';
@@ -143,28 +144,28 @@ export class FirebaseStore {
     await this.auth.authStateReady();
   }
   async readWorldAt(id){
-    if(!this.config.compactSync)return (await this.sdk.get(this.sdk.ref(this.db,'worlds/'+id))).val();
-    this.readers??=new Map();let reader=this.readers.get(id);if(!reader){reader=new WorldReader(this.sdk,this.db,id,{cache:this.records()});this.readers.set(id,reader);}return reader.read();
+    if(!this.config.compactSync)return (await this.sdk.get(this.sdk.ref(this.db,sparkPath(this.config,'worlds',id)))).val();
+    this.readers??=new Map();let reader=this.readers.get(id);if(!reader){reader=new WorldReader(this.sdk,this.db,id,{cache:this.records(),config:this.config});this.readers.set(id,reader);}return reader.read();
   }
   records(){const scope=JSON.stringify([this.config.firebase?.projectId||this.config.firebase?.databaseURL||'test',this.uid||'anonymous']);if(this.recordScope!==scope){this.recordScope=scope;this.recordStorage=recordCache(scope);}return this.recordStorage;}
-  async seasonArchive(id){const worldId=id==='test'?'main':id,path='worlds/'+worldId,key='archive:'+worldId,cache=this.records();
-    let version;try{version=(await this.sdk.get(this.sdk.ref(this.db,'recordVersions/'+worldId+'/archive'))).val();}catch(error){const offline=await cache.get(key,undefined);if(offline?.rankings&&offline?.territories)return {...offline,localUnverified:true};throw error;}const cached=version?await cache.get(key,version):null;if(cached?.rankings&&cached?.territories)return cached;
+  async seasonArchive(id){const worldId=id==='test'?'main':id;let archiveConfig=this.config;if(sparkEnabled(this.config)&&!(await this.sdk.get(this.sdk.ref(this.db,sparkPath(this.config,'worlds',worldId)+'/season/id'))).exists())archiveConfig={};const path=sparkPath(archiveConfig,'worlds',worldId),key='archive:'+worldId,cache=this.records();
+    let version;try{version=(await this.sdk.get(this.sdk.ref(this.db,sparkPath(archiveConfig,'recordVersions',worldId)+'/archive'))).val();}catch(error){const offline=await cache.get(key,undefined);if(offline?.rankings&&offline?.territories)return {...offline,localUnverified:true};throw error;}const cached=version?await cache.get(key,version):null;if(cached?.rankings&&cached?.territories)return cached;
     const archive=id==='test'?archiveTestSeason((await this.sdk.get(this.sdk.ref(this.db,path))).val()):(await this.sdk.get(this.sdk.ref(this.db,path+'/season/result'))).val();if(!archive)throw Error('최종 기록을 아직 정리하고 있습니다.');
     // Never persist against a stale metadata stamp while a correction is arriving.
-    const after=(await this.sdk.get(this.sdk.ref(this.db,'recordVersions/'+worldId+'/archive'))).val();if(version&&after===version)await cache.put(key,version,archive);return archive;
+    const after=(await this.sdk.get(this.sdk.ref(this.db,sparkPath(archiveConfig,'recordVersions',worldId)+'/archive'))).val();if(version&&after===version)await cache.put(key,version,archive);return archive;
   }
-  async battleDetail(id){return this.reader?this.reader.detail(id):(await this.sdk.get(this.sdk.ref(this.db,'worlds/'+this.config.worldId+'/history/'+id))).val();}
+  async battleDetail(id){return this.reader?this.reader.detail(id):(await this.sdk.get(this.sdk.ref(this.db,sparkPath(this.config,'worlds',this.config.worldId)+'/history/'+id))).val();}
   async advanceClosedSeason(){
     if(!this.config.compactSync)return false;
-    const path='worlds/'+this.config.worldId,season=(await this.sdk.get(this.sdk.ref(this.db,path+'/season'))).val();
+    const path=sparkPath(this.config,'worlds',this.config.worldId),season=(await this.sdk.get(this.sdk.ref(this.db,path+'/season'))).val();
     const next=followingSeason({season},this.now());if(!next)return false;
     // Discover the current season without downloading archived armies and dice.
     const profile=(await this.sdk.get(this.sdk.ref(this.db,path+'/players/'+this.uid))).val();
     if(profile?.nameChosen)this.publicName=profile.name;
     await this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(season.result)).catch(()=>{});
     this.config.worldId='season-'+next.number;this.initialRaw=null;
-    const nextRef=this.sdk.ref(this.db,'worlds/'+this.config.worldId);
-    if((await this.sdk.get(this.sdk.ref(this.db,'worlds/'+this.config.worldId+'/revision'))).exists())return true;
+    const nextRef=this.sdk.ref(this.db,sparkPath(this.config,'worlds',this.config.worldId));
+    if((await this.sdk.get(this.sdk.ref(this.db,sparkPath(this.config,'worlds',this.config.worldId)+'/revision'))).exists())return true;
     if(next.number>=FIRST_CAMPAIGN_SEASON){await this.callCampaign('campaignOpen',{worldId:this.config.worldId});return true;}
     // Transactions are needed only for a new season, never to test an existing one.
     const result=await this.sdk.runTransaction(nextRef,current=>{if(current)return;const initial=createSeasonWorld(next.number,next.startAt,'samguk:'+this.config.worldId+':'+entropy());initial.command.actor=this.uid;return initial;},{applyLocally:false});
@@ -180,15 +181,16 @@ export class FirebaseStore {
       else{const provider=new this.authSdk.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});user=(await this.authSdk.signInWithPopup(this.auth,provider)).user;}
     }
     this.uid=user.uid;this.profileName=name||user.displayName||'새 군주';
-    this.stops.push(this.sdk.onValue(this.sdk.ref(this.db,'rewardTickets/'+this.uid),snap=>{this.rewards=snap.val()||{};if(this.world)this.onWorld(this.world);},()=>{}));
-    if(this.config.seasons){const index=(await this.sdk.get(this.sdk.ref(this.db,'seasonIndex'))).val()||{};this.config.worldId=Object.keys(index).filter(id=>/^season-[0-9]+$/.test(id)).sort((a,b)=>Number(b.slice(7))-Number(a.slice(7)))[0]||activeWorld(this.now());for(let tries=0;tries<4;tries++){if(await this.advanceClosedSeason())continue;const prev=await this.readWorldAt(this.config.worldId);this.initialRaw=prev;if(prev?.players?.[this.uid]?.nameChosen)this.publicName=prev.players[this.uid].name;if(prev?.season?.endedAt)await this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(prev.season.result)).catch(()=>{});if(prev?.season?.deadline&&this.now()>=prev.season.deadline&&!prev.season.endedAt){if(campaignEnabled(prev)){await this.callCampaign('campaignOrder',{worldId:this.config.worldId,id:commandId(),seq:prev.players?.[this.uid]?.commandSeq||0,type:'recruit'});continue;}const before=normalizeWorld(prev),command={id:commandId(),type:'recruit',at:this.now(),baseRevision:before.revision},ended=applyCommand(before,this.uid,command,command.at);const chatPath='chat/'+this.config.worldId,chat=(await this.sdk.get(this.sdk.ref(this.db,chatPath))).val(),nextChat=appendSystemMessages(chat,systemEvents(before,ended),this.uid,command.at),patch={};for(const[k,v]of Object.entries(changedPaths(before,ended)))patch['worlds/'+this.config.worldId+'/'+k]=v;if(this.config.compactSync)patch['historyFeed/'+this.config.worldId]=historyFeed(ended);for(const[k,v]of Object.entries(changedPaths(chat,nextChat)))patch[chatPath+'/'+k]=v;await this.sdk.update(this.sdk.ref(this.db),patch);continue;}const next=prev?followingSeason(prev,this.now()):null;if(!next)break;this.config.worldId='season-'+next.number;if(next.number>=FIRST_CAMPAIGN_SEASON){await this.callCampaign('campaignOpen',{worldId:this.config.worldId});continue;}const nextRef=this.sdk.ref(this.db,'worlds/'+this.config.worldId);const result=await this.sdk.runTransaction(nextRef,current=>{if(current)return;const initial=createSeasonWorld(next.number,next.startAt,'samguk:'+this.config.worldId+':'+entropy());initial.command.actor=this.uid;return initial;},{applyLocally:false});if(result.committed||result.snapshot.exists())continue;throw new GameError('새 시즌을 준비하지 못했습니다. 다시 연결해 주세요.');}}
-    const path=`worlds/${this.config.worldId||'main'}`;this.ref=this.sdk.ref(this.db,path);this.chatPath=/^season-/.test(this.config.worldId)?'chat/'+this.config.worldId:'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
+    if(sparkEnabled(this.config))importSparkPending(globalThis.localStorage,this.config.previousProjectId,this.config.firebase.projectId,this.uid);
+    if(!sparkEnabled(this.config))this.stops.push(this.sdk.onValue(this.sdk.ref(this.db,'rewardTickets/'+this.uid),snap=>{this.rewards=snap.val()||{};if(this.world)this.onWorld(this.world);},()=>{}));
+    if(this.config.seasons){const index=(await this.sdk.get(this.sdk.ref(this.db,'seasonIndex'))).val()||{};const sparkInitial=sparkEnabled(this.config)?(await this.sdk.get(this.sdk.ref(this.db,'runtimeMode/activeWorld'))).val():null;this.config.worldId=[...Object.keys(index),...(sparkInitial?[sparkInitial]:[])].filter(id=>/^season-[0-9]+$/.test(id)).sort((a,b)=>Number(b.slice(7))-Number(a.slice(7)))[0]||activeWorld(this.now());for(let tries=0;tries<4;tries++){if(await this.advanceClosedSeason())continue;const prev=await this.readWorldAt(this.config.worldId);this.initialRaw=prev;if(prev?.players?.[this.uid]?.nameChosen)this.publicName=prev.players[this.uid].name;if(prev?.season?.endedAt)await this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(prev.season.result)).catch(()=>{});if(prev?.season?.deadline&&this.now()>=prev.season.deadline&&!prev.season.endedAt){if(campaignEnabled(prev)){await this.callCampaign('campaignOrder',{worldId:this.config.worldId,id:commandId(),seq:prev.players?.[this.uid]?.commandSeq||0,type:'recruit'});continue;}const before=normalizeWorld(prev),command={id:commandId(),type:'recruit',at:this.now(),baseRevision:before.revision},ended=applyCommand(before,this.uid,command,command.at);const chatPath=sparkPath(this.config,'chat',this.config.worldId),chat=(await this.sdk.get(this.sdk.ref(this.db,chatPath))).val(),nextChat=appendSystemMessages(chat,systemEvents(before,ended),this.uid,command.at),patch={};for(const[k,v]of Object.entries(changedPaths(before,ended)))patch[sparkPath(this.config,'worlds',this.config.worldId)+'/'+k]=v;if(this.config.compactSync)patch['historyFeed/'+this.config.worldId]=historyFeed(ended);for(const[k,v]of Object.entries(changedPaths(chat,nextChat)))patch[chatPath+'/'+k]=v;await this.sdk.update(this.sdk.ref(this.db),patch);continue;}const next=prev?followingSeason(prev,this.now()):null;if(!next)break;this.config.worldId='season-'+next.number;if(next.number>=FIRST_CAMPAIGN_SEASON){await this.callCampaign('campaignOpen',{worldId:this.config.worldId});continue;}const nextRef=this.sdk.ref(this.db,sparkPath(this.config,'worlds',this.config.worldId));const result=await this.sdk.runTransaction(nextRef,current=>{if(current)return;const initial=createSeasonWorld(next.number,next.startAt,'samguk:'+this.config.worldId+':'+entropy());initial.command.actor=this.uid;return initial;},{applyLocally:false});if(result.committed||result.snapshot.exists())continue;throw new GameError('새 시즌을 준비하지 못했습니다. 다시 연결해 주세요.');}}
+    const path=sparkPath(this.config,'worlds',this.config.worldId||'main');this.ref=this.sdk.ref(this.db,path);this.chatPath=/^season-/.test(this.config.worldId)?sparkPath(this.config,'chat',this.config.worldId):'chat/global';this.chatRef=this.sdk.ref(this.db,this.chatPath);
     let raw=this.initialRaw||await this.readWorldAt(this.config.worldId||'main');this.initialRaw=null;
     if(!raw){const initial=createWorld(this.now(),`samguk:${this.config.worldId||'main'}:${entropy()}`);initial.command.actor=this.uid;const result=await this.sdk.runTransaction(this.ref,current=>current?undefined:initial,{applyLocally:false});raw=result.committed?result.snapshot.val():(await this.sdk.get(this.ref)).val();}
-    this.world=normalizeWorld(raw);this.worldReady=true;if(this.world.season?.endedAt)this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(this.world.season.result)).catch(()=>{});
+    this.world=normalizeWorld(raw);if(sparkEnabled(this.config))this.rewards=this.world.sparkTickets?.[this.uid]||{};this.worldReady=true;if(this.world.season?.endedAt)this.sdk.set(this.sdk.ref(this.db,'seasonIndex/'+this.config.worldId),indexEntry(this.world.season.result)).catch(()=>{});
     if(this.config.compactSync){
-      this.reader=this.readers?.get(this.config.worldId||'main')||new WorldReader(this.sdk,this.db,this.config.worldId||'main',{cache:this.records()});
-      this.reader.onWorld=raw=>{try{const world=normalizeWorld(raw);this.worldReady=true;this.observed=world;if(world.command.id!==this.pendingId){this.world=world;this.onWorld(world);}this.onConnection(this.connected);}catch(e){this.worldReady=false;this.onConnection(false,e.message);}};
+      this.reader=this.readers?.get(this.config.worldId||'main')||new WorldReader(this.sdk,this.db,this.config.worldId||'main',{cache:this.records(),config:this.config});
+      this.reader.onWorld=raw=>{try{const world=normalizeWorld(raw);this.worldReady=true;this.observed=world;if(sparkEnabled(this.config))this.rewards=world.sparkTickets?.[this.uid]||{};if(world.command.id!==this.pendingId){this.world=world;this.onWorld(world);}this.onConnection(this.connected);}catch(e){this.worldReady=false;this.onConnection(false,e.message);}};
       this.reader.onError=e=>{this.worldReady=false;this.onConnection(false,firebaseMessage(e));};this.reader.start();
     }else this.stops.push(this.sdk.onValue(this.ref,snap=>{if(!snap.exists()){this.worldReady=false;this.onConnection(false,'전황을 다시 확인해야 합니다.');return;}try{const world=normalizeWorld(snap.val());this.worldReady=true;this.observed=world;if(world.command.id===this.pendingId)return;this.world=world;this.onWorld(world);}catch(error){this.worldReady=false;this.onConnection(false,error.message);}},error=>{this.worldReady=false;this.onConnection(false,firebaseMessage(error));}));
     this.stops.push(this.sdk.onValue(this.chatRef,snap=>{this.chat=snap.val();this.chatReady=true;this.onChat(this.chat);this.onConnection(this.connected);},error=>{this.chatReady=false;this.onConnection(false,firebaseMessage(error));}));
@@ -207,7 +209,7 @@ export class FirebaseStore {
       if(this.closed||scope!==this.config.worldId)return;
       const world=normalizeWorld(w);
       if(!this.world||this.world.season?.id!==world.season?.id||world.revision>=this.world.revision){this.world=world;this.observed=world;}
-      this.worldReady=true;this.campaignSyncPending();
+      this.worldReady=true;if(sparkEnabled(this.config))this.rewards=this.world.sparkTickets?.[this.uid]||{};this.campaignSyncPending();
       if(c){this.chat=c.val();this.chatReady=true;this.onChat(this.chat);}
       this.onWorld(this.world);this.onConnection(this.connected);
     }catch(error){if(!this.closed&&scope===this.config.worldId){this.worldReady=false;if(!worldOnly)this.chatReady=false;this.onConnection(false,worldOnly&&this.campaignSyncPending()?'명령은 완료됐습니다. 최신 전황을 확인 중입니다.':firebaseMessage(error));}throw error;}finally{this.reading=null;}})();return this.reading;
