@@ -26,7 +26,9 @@ if(mode==='--backup'){
  const packed=await packSparkRecords(n),target='/sparkWorlds/'+id+'.json',held=await targetApi.get(target,{headers:{'X-Firebase-ETag':'true'}});if(held.body)throw Error('무료 전장이 이미 있습니다. 덮어쓰지 않습니다.');
  for(const k of ['territories','players','returnQueues','pendingBattles','season','heroIndex','enhancementLedger'])if(JSON.stringify(baseline[k]||null)!==JSON.stringify(packed.world[k]||null))throw Error('보호 필드 변경: '+k);
  await targetApi.put(target,packed.world,{headers:{'if-match':held.response.headers.get('etag')}});
- const backup=JSON.parse(fs.readFileSync(dir+'/database.json'));const archives=Object.fromEntries(Object.entries(backup.worlds||{}).filter(([key])=>key!==id));const patch={['sparkHistoryFeed/'+id]:historyFeed(packed.world),worlds:archives,seasonIndex:backup.seasonIndex||{},recordVersions:backup.recordVersions||{},rewardTickets:tickets};
+ const backup=JSON.parse(fs.readFileSync(dir+'/database.json'));const archives=Object.fromEntries(Object.entries(backup.worlds||{}).filter(([key])=>key!==id));const index=(await api.get('/seasonIndex.json')).body||{};
+ for(const key of Object.keys(index).filter(key=>key!==id&&/^season-/.test(key))){const result=(await api.get('/worlds/'+key+'/season/result.json')).body;if(result)archives[key]={...(archives[key]||{}),season:{...(archives[key]?.season||{}),id:key,number:Number(key.slice(7)),result}};}
+ const patch={['sparkHistoryFeed/'+id]:historyFeed(packed.world),worlds:archives,seasonIndex:index,recordVersions:backup.recordVersions||{},rewardTickets:tickets};
  for(const [from,to]of [['battleRecords','sparkBattleRecords'],['enhancementRecords','sparkEnhancementRecords'],['recordVersions','sparkRecordVersions']]){const value=(await api.get('/'+from+'/'+id+'.json')).body;if(value)patch[to+'/'+id]=value;}
  // Seed migrated archives first, then publish any durable outbox from the source.
  await targetApi.patch('/.json',patch);if(Object.keys(packed.records).length)await targetApi.patch('/.json',packed.records);
