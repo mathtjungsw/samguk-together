@@ -1,7 +1,12 @@
 import {build} from 'esbuild';
 import {cp,mkdir,readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {buildFarewell} from './build-farewell.mjs';
+const config=JSON.parse(await readFile('firebase-config.json','utf8'));
 await mkdir('dist',{recursive:true});
+if(config.siteClosed){
+  await buildFarewell();
+}else{
 await cp('public','dist',{recursive:true});
 await build({entryPoints:['src/app.js'],outfile:'dist/app.js',bundle:true,format:'esm',target:['es2022'],minify:true,sourcemap:true,legalComments:'linked',logLevel:'info'});
 await build({entryPoints:['src/battle-estimate.worker.js'],outfile:'dist/battle-estimate.js',bundle:true,format:'esm',target:['es2022'],minify:true,legalComments:'linked',logLevel:'info'});
@@ -13,4 +18,5 @@ await writeFile('dist/version.json',JSON.stringify({id:buildId}));
 await writeFile('dist/.nojekyll','');
 await cp('LICENSE','dist/LICENSE.txt');
 await writeFile('dist/credits.html','<!doctype html><meta charset="utf-8"><title>지도 자료 출처</title><h1>삼국 · 함께 천하 — 지도 자료</h1><p>역사 지명·위치는 CHGIS, 외곽은 Historical Basemaps by André Ourednik and contributors를 참고했습니다. 게임용 구획은 직접 조정했습니다.</p><p><a href="https://chgis.hudci.org/tgw/">CHGIS Temporal Gazetteer</a> · <a href="https://github.com/aourednik/historical-basemaps">Historical Basemaps</a> · <a href="LICENSE.txt">GPL-3.0 라이선스</a></p><p>외곽은 한 말기 자료의 근사치이며 특정 연도의 삼국 국경을 그대로 재현하지 않습니다. 원작 게임 이미지·텍스처는 사용하지 않았습니다.</p>');
-const config=JSON.parse(await readFile('firebase-config.json','utf8'));console.log(config.enabled?'Firebase 전장 연결을 포함해 빌드했습니다.':'연습 전장을 빌드했습니다. Firebase 설정 후 다시 빌드하면 온라인 입장이 활성화됩니다.');
+console.log(config.enabled?'Firebase 전장 연결을 포함해 빌드했습니다.':'연습 전장을 빌드했습니다. Firebase 설정 후 다시 빌드하면 온라인 입장이 활성화됩니다.');
+}

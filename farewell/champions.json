@@ -1,0 +1,52 @@
+[
+  {
+    "season": 1,
+    "endedAt": 1793264464976,
+    "winners": [
+      {
+        "name": "김부장",
+        "territories": 72
+      }
+    ]
+  },
+  {
+    "season": 2,
+    "endedAt": 1793316527181,
+    "winners": [
+      {
+        "name": "김부장",
+        "territories": 72
+      }
+    ]
+  },
+  {
+    "season": 3,
+    "endedAt": 1793365608850,
+    "winners": [
+      {
+        "name": "정부장",
+        "territories": 72
+      }
+    ]
+  },
+  {
+    "season": 4,
+    "endedAt": 1793604168883,
+    "winners": [
+      {
+        "name": "김부장(본)",
+        "territories": 72
+      }
+    ]
+  },
+  {
+    "season": 5,
+    "endedAt": 1793853630942,
+    "winners": [
+      {
+        "name": "김부장(본)",
+        "territories": 72
+      }
+    ]
+  }
+]

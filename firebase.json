@@ -1,6 +1,6 @@
 {
   "database": {
-    "rules": "firebase.database.rules.json"
+    "rules": "closure-rules.json"
   },
   "emulators": {
     "auth": {

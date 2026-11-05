@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#131b16">
+  <meta name="description" content="삼국 · 함께 천하 시즌 5 종료. 함께한 군주들에게 감사의 인사를 전합니다.">
+  <title>삼국 · 함께 천하 | 함께한 천하의 기록</title>
+  <link rel="preload" as="image" href="./media/last-banner.webp">
+  <link rel="stylesheet" href="./farewell.css">
+  <script src="./farewell.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="./" aria-label="삼국 · 함께 천하 홈">
+      <span class="seal" aria-hidden="true">三</span>
+      <span>삼국 · 함께 천하<small>각자의 깃발, 하나의 천하</small></span>
+    </a>
+    <nav aria-label="대문 메뉴"><a href="#champions">시즌 우승자 <span aria-hidden="true">↓</span></a></nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="farewell-title">
+      <img class="hero-art" src="./media/last-banner.webp" alt="" fetchpriority="high">
+      <div class="hero-copy">
+        <p class="eyebrow">마지막 장 <span aria-hidden="true">◆</span> 시즌 5</p>
+        <h1 id="farewell-title">그 동안 삼국지를<br>사랑해주셔서 감사합니다.<br><span>더 좋은 모습으로 만나겠습니다</span></h1>
+        <p class="status"><span aria-hidden="true"></span> 시즌 5를 끝으로 게임 운영을 종료했습니다</p>
+      </div>
+      <a class="hero-link" href="#champions">함께한 천하의 기록 <span aria-hidden="true">↓</span></a>
+    </section>
+    <section class="hall content" id="champions" aria-labelledby="champions-title">
+      <p class="eyebrow"><span aria-hidden="true">◆</span> 삼국지 지난 역사</p>
+      <h2 id="champions-title">정규 시즌 우승자</h2>
+      <ol class="champions">
+        <!-- CHAMPIONS -->
+      </ol>
+    </section>
+    <section class="gallery content" aria-labelledby="gallery-title">
+      <div class="gallery-heading">
+        <div><p class="eyebrow"><span aria-hidden="true">◆</span> 난세의 풍경</p><h2 id="gallery-title">전장의 기억</h2></div>
+        <button id="motion-toggle" type="button" aria-pressed="false" hidden>전쟁 GIF 재생</button>
+      </div>
+      <div class="battle-scenes">
+        <figure>
+          <img class="battle-art" src="./media/last-banner.webp" data-animation="./media/cavalry.gif" alt="황혼의 평야에서 군기를 앞세워 돌격하는 기병대" width="720" height="405" loading="lazy" decoding="async">
+          <figcaption><span>第一景</span><strong>황혼의 기병전</strong></figcaption>
+        </figure>
+        <figure>
+          <img class="battle-art" src="./media/red-cliffs.webp" data-animation="./media/red-cliffs.gif" alt="달빛 아래 장강을 가르며 불길 속으로 나아가는 전선" width="720" height="405" loading="lazy" decoding="async">
+          <figcaption><span>第二景</span><strong>적벽의 불길</strong></figcaption>
+        </figure>
+      </div>
+    </section>
+  </main>
+  <footer><span aria-hidden="true">◆</span> 삼국 · 함께 천하 <span aria-hidden="true">◆</span></footer>
+</body>
+</html>

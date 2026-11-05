@@ -1,5 +1,6 @@
 {
   "enabled": true,
+  "siteClosed": true,
   "worldId": "main",
   "firebase": {
     "projectId": "samguk-friends-20261105",
